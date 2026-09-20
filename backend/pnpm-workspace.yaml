@@ -1,0 +1,10 @@
+allowBuilds:
+  '@prisma/engines': true
+  bcrypt: true
+  cpu-features: true
+  esbuild: true
+  msgpackr-extract: true
+  prisma: true
+  protobufjs: true
+  ssh2: true
+  workerd: true

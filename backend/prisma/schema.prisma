@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  userId     Int    @id @default(autoincrement())
+  email      String @unique
+  password   String
+  first_name String
+  last_name  String
+
+  githubAccount GithubAccount?
+  tasks   Task[]
+}
+
+model GithubAccount {
+  id Int @id @default(autoincrement())
+
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  githubUserId    BigInt             @unique
+  githubUsername  String
+  githubAvatarUrl String?
+  repositories    GithubRepository[]
+
+  githubAccessToken  String
+  githubRefreshToken String
+}
+
+model GithubRepository {
+  id Int @id @default(autoincrement())
+
+  githubAccountId Int
+  githubAccount   GithubAccount @relation(fields: [githubAccountId], references: [id], onDelete: Cascade)
+
+  githubRepoId BigInt
+  name         String
+  fullName     String
+
+  description   String?
+  private       Boolean
+  htmlUrl       String
+  cloneUrl      String?
+  defaultBranch String?
+
+  @@unique([githubAccountId, githubRepoId])
+}
+
+model Task{
+  id        Int   @id      @default(autoincrement())
+  userId    Int
+  User      User  @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  conversation   query[]
+}
+
+model query{
+  id        Int     @id     @default(autoincrement())
+  query     String
+  taskId    Int
+  task      Task    @relation(fields: [taskId], references: [id])
+  response  String
+}
