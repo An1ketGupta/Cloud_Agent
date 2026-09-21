@@ -56,7 +56,8 @@ model Task{
   id        Int   @id      @default(autoincrement())
   userId    Int
   User      User  @relation(fields: [userId], references: [userId], onDelete: Cascade)
-  conversation   query[]
+  conversation    query[]
+  status    Status    @default(pending)
 }
 
 model query{
@@ -65,4 +66,10 @@ model query{
   taskId    Int
   task      Task    @relation(fields: [taskId], references: [id])
   response  String
+}
+
+enum Status{
+  pending
+  runnning
+  completed
 }

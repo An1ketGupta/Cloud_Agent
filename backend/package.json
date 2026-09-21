@@ -6,7 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon index.js",
-    "postinstall": "prisma skills sync || exit 0"
+    "postinstall": "prisma skills sync || exit 0",
+    "worker": "nodemon workers/taskWorker.js"
   },
   "keywords": [],
   "author": "",
@@ -20,16 +21,19 @@
   },
   "type": "module",
   "dependencies": {
+    "@google/genai": "^2.23.0",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "7.10.0",
     "axios": "^1.20.0",
     "bcrypt": "^6.0.0",
+    "bullmq": "^6.3.8",
     "cookie-parser": "^1.4.7",
     "crypto": "^1.0.1",
     "dockerode": "^5.0.1",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "fs": "0.0.1-security",
+    "ioredis": "^6.0.0",
     "jsonwebtoken": "^9.0.3",
     "nodemon": "^3.1.14",
     "zod": "^4.5.4"

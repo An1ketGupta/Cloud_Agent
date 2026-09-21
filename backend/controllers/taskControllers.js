@@ -1,39 +1,57 @@
-import { prisma } from "../clients/prismaClient.js";
-import { executeContainerCommand } from "../agent/sandbox/executeCommand.js";
-import createAgentContainer from "../services/createAgentContainer.js"
-import { CloneRepository } from "../agent/github/cloneRepository.js";
+import { prisma } from "../clients/prismaClient.js"
+import { taskQueue } from "../queues/taskQueue.js";
 
-export async function NewTask(req,res){
-    const repository = req.body.repository
-
-    const agentContainer = await createAgentContainer();
-    const githubUser = await prisma.githubAccount.findFirst({
-        where : {
-            userId : req.user.id
+export async function NewTask(req, res) {
+    try {
+        const user = req.user;
+        const { query } = req.body;
+        if (!query || typeof query !== "string" || query.trim() === "") {
+            return res.status(400).json({
+                success: false,
+                error: "Query is required",
+            });
         }
-    })
 
-    if(!githubUser){
-        return res.status(401).json({
-            'message' : "Github User not found"
-        })
-    }
+        const task = await prisma.task.create({
+            data: {
+                userId: user.userId,
+                status: 'pending',
+                conversation: {
+                    create: {
+                        query: query.trim(),
+                        response: "",
+                    },
+                },
+            },
+            include: {
+                conversation: true,
+            },
+        });
 
-    const githubUsername = githubUser.githubUsername
-    const repoCloneResponse = await CloneRepository(agentContainer, repository, githubUsername)
+        await taskQueue.add(
+                "agent-task", {
+                taskId: task.id,
+                type : "new"
+            }
+        )
 
-    if(repoCloneResponse.exitCode == 0){
-        return res.json({
-            "message" : "Cloning successful."
-        })
-    }
-    else{
-        res.json({
-            "message" : repoCloneResponse.exitCode
-        })
+        return res.status(201).json({
+            success: true,
+            message : "Pushed into the message queue.",
+            task,
+        });
+
+    } catch (error) {
+        console.error("Error creating task:", error);
+
+        return res.status(500).json({
+            success: false,
+            error: error.message,
+        });
     }
 }
 
-export async function continueTask(req,res){
+
+export async function continueTask(req, res) {
 
 }
