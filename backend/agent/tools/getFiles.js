@@ -39,8 +39,12 @@ export async function getFileNameList(container, filePath) {
             }
         });
     
-    return {
-        files,
+    let final = {
+        files, 
         directories
-    };
+    }
+
+    console.log(final)
+    
+    return final
 }

@@ -7,7 +7,7 @@ export default async function ApplyPatch(container, patch) {
         ],
         AttachStdin: true,
         AttachStdout: true,
-        AttachStderr: true,
+        AttachStderr: true
     });
 
     const stream = await exec.start({
@@ -15,24 +15,32 @@ export default async function ApplyPatch(container, patch) {
         stdin: true
     });
 
-    stream.write(patch);
-    stream.end();
-
     let output = "";
 
-    await new Promise((resolve, reject) => {
-        stream.on("data", chunk => {
-            output += chunk.toString();
-        });
+    stream.on("data", chunk => {
+        output += chunk.toString();
+    });
 
+    await new Promise((resolve, reject) => {
         stream.on("end", resolve);
         stream.on("error", reject);
+
+        stream.write(patch);
+        stream.end();
     });
 
     const result = await exec.inspect();
 
+    if (result.ExitCode !== 0) {
+        throw new Error(
+            `Unable to apply the patch.\n${output}`
+        );
+    }
+
+    console.log("Output: ", output)
+
     return {
-        success: result.ExitCode === 0,
+        success: true,
         output
     };
 }

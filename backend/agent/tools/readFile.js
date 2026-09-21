@@ -1,11 +1,9 @@
-export async function ReadFile(container, filePath){
+export async function ReadFile(container, filePath) {
     const exec = await container.exec({
-        Cmd : [
-            "cat", filePath
-        ],
+        Cmd: ["cat", "--", filePath],
         AttachStdout: true,
         AttachStderr: true
-    })
+    });
 
     const stream = await exec.start();
 
@@ -20,5 +18,18 @@ export async function ReadFile(container, filePath){
         stream.on("error", reject);
     });
 
-    return output;
+    const info = await exec.inspect();
+
+    if (info.ExitCode !== 0) {
+        throw new Error(
+            `Failed to read ${filePath}: ${output}`
+        );
+    }
+
+    console.log("Output: ", output)
+
+    return {
+        success : true,
+        output
+    }
 }

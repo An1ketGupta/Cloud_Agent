@@ -5,13 +5,16 @@ import { cloneRepository } from "../github/cloneRepository.js";
 import { toolDeclarations } from "../tools/toolDeclarations.js";
 import { executeFunction } from "./executeFunction.js";
 
+const MAX_AGENT_STEP = 50;
+const MAX_FAIL_ATTEMPT = 2;
+
 function isMalformedToolCall(error) {
     if(error?.error?.error?.code === "malformed_tool_call" || error?.cause?.error?.code === "malformed_tool_call")
         return true;    
 }
 
 async function createInteraction(params) {
-    for (let attempt = 1;attempt <= 1;attempt++) {
+    for (let attempt = 1;attempt <= MAX_FAIL_ATTEMPT;attempt++) {
         try {
             return await geminiClient.interactions.create(params);
         } catch (error) {
@@ -71,7 +74,7 @@ export async function runAgentTask(data) {
                 tools: toolDeclarations
             });
 
-            for (let step = 0; step < 10; step++) {
+            for (let step = 0; step < MAX_AGENT_STEP; step++) {
                 const functionCalls = (interaction.steps ?? []).filter(
                     interactionStep =>
                         interactionStep.type === "function_call"

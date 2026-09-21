@@ -40,5 +40,15 @@ export async function SearchFile(container, filePath) {
         stream.on("error", reject);
     });
 
-    return output.trim().length > 0;
+    const result = await exec.inspect();
+    if(result.ExitCode != 0){
+        throw new Error("Unable to search the file.")
+    }
+
+    console.log(output)
+
+    return {
+        success: result.ExitCode === 0,
+        output
+    };
 }
