@@ -25,5 +25,5 @@ export async function writeFile(container, filePath, content){
 
     const result = await exec.inspect();
 
-    return result.exitcode === 0
+    return result.ExitCode === 0
 }

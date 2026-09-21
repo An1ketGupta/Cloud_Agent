@@ -2,7 +2,31 @@ import { dockerClient } from "../../clients/dockerClient.js";
 import { geminiClient } from "../../clients/geminiClient.js";
 import { SYSTEM_PROMPT_NEW_CHAT } from "../../public/prompt.js";
 import { cloneRepository } from "../github/cloneRepository.js";
+import { toolDeclarations } from "../tools/toolDeclarations.js";
 import { executeFunction } from "./executeFunction.js";
+
+function isMalformedToolCall(error) {
+    if(error?.error?.error?.code === "malformed_tool_call" || error?.cause?.error?.code === "malformed_tool_call")
+        return true;    
+}
+
+async function createInteraction(params) {
+    for (let attempt = 1;attempt <= 1;attempt++) {
+        try {
+            return await geminiClient.interactions.create(params);
+        } catch (error) {
+            if (
+                !isMalformedToolCall(error) ||
+                attempt === 1
+            ) {
+                throw error;
+            }
+            console.log(
+                `Gemini generated a malformed tool call.`
+            );
+        }
+    }
+}
 
 export async function runAgentTask(data) {
     let container;
@@ -32,7 +56,7 @@ export async function runAgentTask(data) {
 
         const githubRepoCloneResponse = await cloneRepository(container, repoName, userId)
 
-        if(githubRepoCloneResponse.complete != true){
+        if(!githubRepoCloneResponse.complete){
             console.log(githubRepoCloneResponse.message)
             throw new Error("Unable to clone the repository.");
         }
@@ -40,53 +64,82 @@ export async function runAgentTask(data) {
         else{
             console.log("Cloned the repository.")
 
-            let input =
-                SYSTEM_PROMPT_NEW_CHAT +
-                "\n\nUSER REQUEST:\n" +
-                query;
-    
-            while (true) {
-                const interaction = await geminiClient.interactions.create({
-                    model: "gemini-3.1-flash-lite",
-                    input,
-                });
-    
-                const output = interaction.output_text;
-                if (!output) {
-                    throw new Error("Gemini returned an empty response");
-                }
-    
-                console.log("Agent output:", output);
-    
-                if (output.startsWith("FUNCTION_CALL:")) {
-                    const response = await executeFunction(
-                        output,
-                        container
-                    );
-                    const serializedResponse = JSON.stringify(
-                        response,
-                        null,
-                        2
-                    );
+            let interaction = await createInteraction({
+                model: "gemini-3.1-flash-lite",
+                system_instruction: SYSTEM_PROMPT_NEW_CHAT,
+                input: query,
+                tools: toolDeclarations
+            });
 
-                    if (serializedResponse === undefined) {
+            for (let step = 0; step < 10; step++) {
+                const functionCalls = (interaction.steps ?? []).filter(
+                    interactionStep =>
+                        interactionStep.type === "function_call"
+                );
+
+                if (functionCalls.length === 0) {
+                    if (!interaction.output_text) {
                         throw new Error(
-                            "Function returned an unserializable result"
+                            "Gemini returned neither a function call nor a final response"
                         );
                     }
 
-                    input +=
-                        "\n\nFUNCTION_RESULT:\n\n" +
-                        serializedResponse;
-                } else {
+                    console.log("Agent output:", interaction.output_text);
                     console.log("Agent completed task:", taskId);
-                    break;
+
+                    return {
+                        success: true,
+                        taskId,
+                        response: interaction.output_text
+                    };
                 }
+
+                const functionResults = [];
+
+                for (const functionCall of functionCalls) {
+                    console.log(
+                        "Agent function call:",
+                        functionCall.name,
+                        functionCall.arguments
+                    );
+
+                    try {
+                        const response = await executeFunction(
+                            functionCall,
+                            container
+                        );
+
+                        functionResults.push({
+                            type: "function_result",
+                            name: functionCall.name,
+                            call_id: functionCall.id,
+                            result: JSON.stringify(response ?? null)
+                        });
+                    } catch (error) {
+                        functionResults.push({
+                            type: "function_result",
+                            name: functionCall.name,
+                            call_id: functionCall.id,
+                            is_error: true,
+                            result: JSON.stringify({
+                                error: error.message
+                            })
+                        });
+                    }
+                }
+
+                interaction = await createInteraction({
+                    model: "gemini-3.1-flash-lite",
+                    previous_interaction_id: interaction.id,
+                    system_instruction: SYSTEM_PROMPT_NEW_CHAT,
+                    input: functionResults,
+                    tools: toolDeclarations
+                });
             }
-            return {
-                success: true,
-                taskId,
-            };
+
+            throw new Error(
+                `Agent exceeded the maximum of 10 steps`
+            );
         }
         
     } catch (error) {

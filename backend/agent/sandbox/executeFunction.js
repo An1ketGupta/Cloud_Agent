@@ -1,32 +1,18 @@
 import ApplyPatch from "../tools/applyPatch.js";
 import { getFileNameList } from "../tools/getFiles.js";
-import { listTools } from "../tools/listTools.js";
 import { ReadFile } from "../tools/readFile.js";
 import { SearchFile } from "../tools/searchFile.js";
 import { writeFile } from "../tools/writeFile.js";
 
-export async function executeFunction(output, container) {
-    if (typeof output !== "string") {
-        throw new TypeError("Function output must be a string.");
+export async function executeFunction(functionCall, container) {
+    if (!functionCall || typeof functionCall !== "object") {
+        throw new TypeError("A structured function call is required.");
     }
 
-    const functionCall = output
-        .trim()
-        .match(/^FUNCTION_CALL:\s*([A-Za-z_$][\w$]*)\s*\(([\s\S]*)\)$/);
+    const { name: functionName, arguments: args } = functionCall;
 
-    if (!functionCall) {
-        throw new Error("Invalid function call format.");
-    }
-
-    const [, functionName, serializedArguments] = functionCall;
-
-    let args;
-    try {
-        args = JSON.parse(serializedArguments);
-    } catch (error) {
-        throw new Error(`Invalid JSON arguments for ${functionName}.`, {
-            cause: error
-        });
+    if (typeof functionName !== "string" || functionName.length === 0) {
+        throw new TypeError("Function name is required.");
     }
 
     if (args === null || Array.isArray(args) || typeof args !== "object") {
@@ -34,7 +20,6 @@ export async function executeFunction(output, container) {
     }
 
     const functions = {
-        listTools: () => listTools(),
         getFileNameList: () => getFileNameList(container, args.filePath),
         SearchFile: () => SearchFile(container, args.filePath),
         ReadFile: () => ReadFile(container, args.filePath),
