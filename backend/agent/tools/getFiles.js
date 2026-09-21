@@ -1,8 +1,8 @@
-export async function getFileNameList(container, path) {
+export async function getFileNameList(container, filePath) {
     const exec = await container.exec({
         Cmd: [
             "find",
-            path,
+            filePath,
             "-type", "f", "-printf", "FILE:%p\n",
             "-o",
             "-type", "d", "-printf", "DIR:%p\n"

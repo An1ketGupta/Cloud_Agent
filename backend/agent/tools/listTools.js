@@ -6,7 +6,7 @@ export function listTools() {
                 "Lists all files and directories beneath a directory in the mounted repository. Use this first to inspect the repository structure. The path must be /workspace or a path inside /workspace.",
             arguments: [
                 {
-                    name: "path",
+                    name: "filePath",
                     type: "string",
                     required: true,
                     description:
@@ -19,7 +19,7 @@ export function listTools() {
                     "An object containing a files array and a directories array."
             },
             AgentCallFunctiontrigger:
-                'FUNCTION_CALL: getFileNameList({"path":"<absolute workspace directory>"})'
+                'FUNCTION_CALL: getFileNameList({"filePath":"<absolute workspace directory>"})'
         },
         {
             name: "SearchFile",

@@ -31,7 +31,7 @@ export async function NewTask(req, res) {
         await taskQueue.add(
                 "agent-task", {
                 taskId: task.id,
-                type : "new"
+                conversation : task.conversation
             }
         )
 
