@@ -1,5 +1,5 @@
 export function listTools() {
-    return [
+    return `[
         {
             name: "getFileNameList",
             description:
@@ -108,7 +108,7 @@ export function listTools() {
             AgentCallFunctiontrigger:
                 'FUNCTION_CALL: ApplyPatch({"patch":"<complete unified diff as a JSON string>"})'
         }
-    ];
+    ]`
 }
 
 export default listTools;

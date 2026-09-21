@@ -38,7 +38,7 @@ export async function getFileNameList(container, filePath) {
                 directories.push(line.slice(4));
             }
         });
-
+    
     return {
         files,
         directories

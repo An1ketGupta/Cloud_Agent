@@ -40,5 +40,5 @@ export async function SearchFile(container, filePath) {
         stream.on("error", reject);
     });
 
-    console.log(output.trim().length > 0);
+    return output.trim().length > 0;
 }
