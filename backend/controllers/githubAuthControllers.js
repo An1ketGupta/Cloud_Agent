@@ -9,7 +9,8 @@ export async function AuthorizeGithub(req, res) {
     const params = new URLSearchParams({
         client_id: process.env.GITHUB_CLIENT_ID,
         redirect_uri: process.env.GITHUB_CALLBACK_URL,
-        state: random_state
+        state: random_state,
+        scope: "repo"
     })
 
     const githubUrl = `https://github.com/login/oauth/authorize?${params.toString()}`
@@ -23,13 +24,14 @@ export async function AuthorizeGithub(req, res) {
 }
 
 export async function getGithubAccessToken(req, res) {
-    const { code } = req.query
+    const { code, state } = req.query
 
-    if (!code) {
+    if (!code || !state || state !== req.cookies.githubOAuthState) {
         return res.status(400).json({
-            error: "Authorisation code missing."
+            error: "GitHub authorisation could not be verified."
         })
     }
+    res.clearCookie("githubOAuthState");
 
     try {
         const response = await axios.post("https://github.com/login/oauth/access_token",
@@ -48,7 +50,8 @@ export async function getGithubAccessToken(req, res) {
 
         const tokenData = await response.data
         const githubAccessToken = tokenData.access_token
-        const githubRefreshToken = tokenData.refresh_token
+        const githubRefreshToken = tokenData.refresh_token || ""
+        if (!githubAccessToken) throw new Error("GitHub did not return an access token.");
 
         const githubUser = await axios.get(
             "https://api.github.com/user",
@@ -84,17 +87,7 @@ export async function getGithubAccessToken(req, res) {
 
         startGithubRepositorySync(githubAccount)
 
-        res.json({
-            "message": "Authorisation completed.",
-            "user" : {
-                id: githubAccount.id,
-                userId: githubAccount.userId,
-                githubUserId: githubAccount.githubUserId.toString(),
-                githubUsername: githubAccount.githubUsername,
-                githubAvatarUrl: githubAccount.githubAvatarUrl
-            },
-            "repositorySync": "started"
-        })
+        res.redirect(`${process.env.FRONTEND_URL || "http://localhost:5173"}/?github=connected`)
 
     } catch (error) {
         console.error(error)
@@ -102,4 +95,11 @@ export async function getGithubAccessToken(req, res) {
             "error": "GitHub authorisation failed."
         })
     }
+}
+
+export async function syncGithub(req, res) {
+    const account = await prisma.githubAccount.findUnique({ where: { userId: req.user.userId } });
+    if (!account) return res.status(404).json({ error: "Connect GitHub first." });
+    startGithubRepositorySync(account);
+    res.json({ message: "Repository sync started." });
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { authApi } from './api/authApi';
+import TaskWorkspace from './TaskWorkspace';
 
 const emptyForm = {
   firstName: '',
@@ -127,7 +128,7 @@ function AccountPage({ user, onSignOut, busy, error }) {
           Sign out
         </button>
       </header>
-      <section className="mx-5 my-10 max-w-3xl rounded-2xl border border-slate-200 bg-white p-7 shadow-xl shadow-slate-900/5 sm:mx-auto sm:p-12 lg:my-24">
+      <section className="mx-5 my-10 max-w-6xl rounded-2xl border border-slate-200 bg-white p-7 shadow-xl shadow-slate-900/5 sm:mx-auto sm:p-12 lg:my-16">
         <p className={`${eyebrowClassName} mb-3`}>Your workspace</p>
         <h1 className="font-display mb-2 text-3xl font-bold tracking-tight sm:text-5xl">Welcome, {displayName || user.email}.</h1>
         <p className="text-slate-500">Signed in as {user.email}</p>
@@ -140,6 +141,7 @@ function AccountPage({ user, onSignOut, busy, error }) {
             <p className="leading-7 text-slate-600">Your account is ready. Connect GitHub to work with a repository.</p>
           )}
         </div>
+        <TaskWorkspace initialUser={user} />
       </section>
     </main>
   );

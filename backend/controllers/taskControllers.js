@@ -31,6 +31,7 @@ export async function NewTask(req, res) {
         const task = await prisma.task.create({
             data: {
                 userId: user.userId,
+                repositoryId: matches[0].id,
                 status: 'pending',
                 conversation: {
                     create: {
@@ -39,9 +40,7 @@ export async function NewTask(req, res) {
                     },
                 },
             },
-            include: {
-                conversation: true,
-            },
+            include: { conversation: true, repository: { select: { id: true, fullName: true } } },
         });
 
         try {
@@ -87,7 +86,10 @@ export async function getTask(req, res) {
     if (!Number.isInteger(taskId)) return res.status(400).json({ error: "Invalid task ID." });
     const task = await prisma.task.findFirst({
         where: { id: taskId, userId: req.user.userId },
-        include: { conversation: true }
+        include: {
+            conversation: true,
+            repository: { select: { id: true, fullName: true, htmlUrl: true } }
+        }
     });
     if (!task) return res.status(404).json({ error: "Task not found." });
     const resultText = task.conversation[0]?.response;
@@ -96,6 +98,22 @@ export async function getTask(req, res) {
         try { result = JSON.parse(resultText); } catch { result = { message: resultText }; }
     }
     return res.json({ task, result });
+}
+
+export async function listTasks(req, res) {
+    const tasks = await prisma.task.findMany({
+        where: { userId: req.user.userId },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+        include: {
+            conversation: true,
+            repository: { select: { id: true, fullName: true } }
+        }
+    });
+    res.json({ tasks: tasks.map(({ conversation, ...task }) => ({
+        ...task,
+        prompt: conversation[0]?.query || ""
+    })) });
 }
 
 export async function continueTask(req, res) {

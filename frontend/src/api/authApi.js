@@ -1,4 +1,4 @@
-async function request(path, options = {}) {
+export async function request(path, options = {}) {
     let response;
 
     try {

@@ -48,6 +48,7 @@ model GithubRepository {
   htmlUrl       String
   cloneUrl      String?
   defaultBranch String?
+  tasks         Task[]
 
   @@unique([githubAccountId, githubRepoId])
 }
@@ -56,8 +57,11 @@ model Task{
   id        Int   @id      @default(autoincrement())
   userId    Int
   User      User  @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  repositoryId Int?
+  repository GithubRepository? @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
   conversation    query[]
   status    Status    @default(pending)
+  createdAt DateTime @default(now())
 }
 
 model query{
