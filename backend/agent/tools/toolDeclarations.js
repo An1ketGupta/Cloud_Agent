@@ -3,13 +3,13 @@ export const toolDeclarations = [
         type: "function",
         name: "getFileNameList",
         description:
-            "Lists all files and directories recursively beneath a directory in the mounted repository.",
+            "Lists tracked and untracked repository files beneath a directory, excluding ignored files.",
         parameters: {
             type: "object",
             properties: {
                 filePath: {
                     type: "string",
-                    description: "An absolute directory path inside /workspace."
+                    description: "A directory path inside /workspace/repository."
                 }
             },
             required: ["filePath"],
@@ -27,7 +27,7 @@ export const toolDeclarations = [
                 filePath: {
                     type: "string",
                     description:
-                        "An absolute /workspace search path ending with the file name."
+                        "A /workspace/repository search path ending with the file name."
                 }
             },
             required: ["filePath"],
@@ -38,13 +38,13 @@ export const toolDeclarations = [
         type: "function",
         name: "ReadFile",
         description:
-            "Reads the complete text content of one repository file without changing it.",
+            "Reads up to 50,000 characters of one repository file without changing it.",
         parameters: {
             type: "object",
             properties: {
                 filePath: {
                     type: "string",
-                    description: "The absolute path of a file inside /workspace."
+                    description: "The path of a file inside /workspace/repository."
                 }
             },
             required: ["filePath"],
@@ -53,39 +53,40 @@ export const toolDeclarations = [
     },
     {
         type: "function",
-        name: "writeFile",
-        description:
-            "Appends text to a repository file, creating it when it does not exist. Use ApplyPatch to edit an existing file.",
-        parameters: {
-            type: "object",
-            properties: {
-                filePath: {
-                    type: "string",
-                    description: "The absolute destination path inside /workspace."
-                },
-                content: {
-                    type: "string",
-                    description: "The exact text to append to the file."
-                }
-            },
-            required: ["filePath", "content"],
-            additionalProperties: false
-        }
-    },
-    {
-        type: "function",
         name: "ApplyPatch",
         description:
-            "Applies a unified diff from /workspace. Read affected files before preparing the patch. Diff headers must use repository-relative a/ and b/ paths.",
+            "Applies a Git unified diff in /workspace/repository. Read affected files first. Diff headers must use repository-relative a/ and b/ paths.",
         parameters: {
             type: "object",
             properties: {
                 patch: {
                     type: "string",
-                    description: "The complete unified diff to apply with patch -p1."
+                    description: "The complete Git unified diff to apply."
                 }
             },
             required: ["patch"],
+            additionalProperties: false
+        }
+    },
+    {
+        type: "function",
+        name: "SearchContent",
+        description: "Searches tracked repository text for a literal string and returns matching lines.",
+        parameters: {
+            type: "object",
+            properties: { query: { type: "string", description: "Literal text to find." } },
+            required: ["query"],
+            additionalProperties: false
+        }
+    },
+    {
+        type: "function",
+        name: "GitDiff",
+        description: "Returns the current uncommitted repository patch without changing files.",
+        parameters: {
+            type: "object",
+            properties: {},
+            required: [],
             additionalProperties: false
         }
     }

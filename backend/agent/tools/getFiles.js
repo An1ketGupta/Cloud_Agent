@@ -1,50 +1,33 @@
+import path from "node:path";
+import { REPOSITORY_ROOT, runContainerExec } from "../sandbox/containerIO.js";
+import { normalizeRepositoryPath } from "./repositoryPath.js";
+
 export async function getFileNameList(container, filePath) {
-    const exec = await container.exec({
-        Cmd: [
-            "find",
-            filePath,
-            "-type", "f", "-printf", "FILE:%p\n",
-            "-o",
-            "-type", "d", "-printf", "DIR:%p\n"
-        ],
-        AttachStdout: true,
-        AttachStderr: true
-    });
+    const directory = normalizeRepositoryPath(filePath);
 
-    const stream = await exec.start();
+    const result = await runContainerExec(
+        container,
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard"]
+    );
 
-    let output = "";
-
-    await new Promise((resolve, reject) => {
-        stream.on("data", chunk => {
-            output += chunk.toString();
-        });
-
-        stream.on("end", resolve);
-        stream.on("error", reject);
-    });
-
-    const files = [];
-    const directories = [];
-
-    output
-        .trim()
-        .split("\n")
-        .filter(Boolean)
-        .forEach(line => {
-            if (line.startsWith("FILE:")) {
-                files.push(line.slice(5));
-            } else if (line.startsWith("DIR:")) {
-                directories.push(line.slice(4));
-            }
-        });
-    
-    let final = {
-        files, 
-        directories
+    if (result.exitCode !== 0) {
+        throw new Error(result.stderr || "Unable to list files.");
     }
 
-    console.log(final)
-    
-    return final
+    const prefix = path.posix.relative(
+        REPOSITORY_ROOT,
+        directory
+    );
+
+    const files = result.stdout
+        .split("\n")
+        .filter(Boolean)
+        .filter((file) => {
+            return !prefix || file.startsWith(`${prefix}/`);
+        });
+
+    return {
+        files: files.slice(0, 500),
+        truncated: files.length > 500
+    };
 }

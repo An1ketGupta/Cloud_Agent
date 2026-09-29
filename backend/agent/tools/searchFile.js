@@ -1,54 +1,43 @@
+import path from "node:path";
+import {
+    REPOSITORY_ROOT,
+    runContainerExec
+} from "../sandbox/containerIO.js";
+import { normalizeRepositoryPath } from "./repositoryPath.js";
+
 export async function SearchFile(container, filePath) {
-    const length = filePath.length;
+    const absolutePath = normalizeRepositoryPath(filePath);
 
-    let pos = -1;
+    const directory = path.posix.relative(
+        REPOSITORY_ROOT,
+        path.posix.dirname(absolutePath)
+    );
 
-    for (let i = length - 1; i >= 0; i--) {
-        if (filePath[i] === "/") {
-            pos = i;
-            break;
-        }
+    const filename = path.posix.basename(absolutePath);
+
+    const result = await runContainerExec(
+        container,
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard"]
+    );
+
+    if (result.exitCode !== 0) {
+        throw new Error(
+            result.stderr || "Unable to search file names."
+        );
     }
 
-    const fileName = filePath.substring(pos + 1);
-    const directory = filePath.substring(0, pos);
-
-    const exec = await container.exec({
-        Cmd: [
-            "find",
-            directory,
-            "-name",
-            fileName,
-            "-type",
-            "f",
-            "-print"
-        ],
-        AttachStdout: true,
-        AttachStderr: true
-    });
-
-    const stream = await exec.start();
-
-    let output = "";
-
-    await new Promise((resolve, reject) => {
-        stream.on("data", chunk => {
-            output += chunk.toString();
+    const matches = result.stdout
+        .split("\n")
+        .filter((file) => {
+            return (
+                file &&
+                (!directory || file.startsWith(`${directory}/`)) &&
+                path.posix.basename(file) === filename
+            );
         });
 
-        stream.on("end", resolve);
-        stream.on("error", reject);
-    });
-
-    const result = await exec.inspect();
-    if(result.ExitCode != 0){
-        throw new Error("Unable to search the file.")
-    }
-
-    console.log(output)
-
     return {
-        success: result.ExitCode === 0,
-        output
+        files: matches.slice(0, 100),
+        truncated: matches.length > 100
     };
 }

@@ -4,11 +4,27 @@ import { taskQueue } from "../queues/taskQueue.js";
 export async function NewTask(req, res) {
     try {
         const user = req.user;
-        const { query } = req.body;
+        const { query, repositoryId, repoName } = req.body;
         if (!query || typeof query !== "string" || query.trim() === "") {
             return res.status(400).json({
                 success: false,
                 error: "Query is required",
+            });
+        }
+        const selection = Number.isInteger(Number(repositoryId)) && repositoryId != null
+            ? { id: Number(repositoryId) }
+            : typeof repoName === "string" && repoName.trim()
+                ? { OR: [{ fullName: repoName.trim() }, { name: repoName.trim() }] }
+                : null;
+        if (!selection) return res.status(400).json({ success: false, error: "Select a repository." });
+        const matches = await prisma.githubRepository.findMany({
+            where: { ...selection, githubAccount: { userId: user.userId } },
+            take: 2
+        });
+        if (matches.length !== 1) {
+            return res.status(400).json({
+                success: false,
+                error: matches.length ? "Repository name is ambiguous; supply repositoryId." : "Repository not found for this user."
             });
         }
 
@@ -28,14 +44,26 @@ export async function NewTask(req, res) {
             },
         });
 
-        await taskQueue.add(
+        try {
+            await taskQueue.add(
                 "agent-task", {
                 taskId: task.id,
-                conversation : task.conversation,
-                repoName : req.body.repoName,
+                query: query.trim(),
+                queryId: task.conversation[0].id,
+                repositoryId: matches[0].id,
                 userId: task.userId
             }
-        )
+            );
+        } catch (queueError) {
+            await prisma.$transaction([
+                prisma.query.update({
+                    where: { id: task.conversation[0].id },
+                    data: { response: JSON.stringify({ success: false, error: "Unable to enqueue task." }) }
+                }),
+                prisma.task.update({ where: { id: task.id }, data: { status: "failed" } })
+            ]);
+            throw queueError;
+        }
 
         return res.status(201).json({
             success: true,
@@ -54,6 +82,22 @@ export async function NewTask(req, res) {
 }
 
 
-export async function continueTask(req, res) {
+export async function getTask(req, res) {
+    const taskId = Number(req.params.taskId);
+    if (!Number.isInteger(taskId)) return res.status(400).json({ error: "Invalid task ID." });
+    const task = await prisma.task.findFirst({
+        where: { id: taskId, userId: req.user.userId },
+        include: { conversation: true }
+    });
+    if (!task) return res.status(404).json({ error: "Task not found." });
+    const resultText = task.conversation[0]?.response;
+    let result = null;
+    if (resultText) {
+        try { result = JSON.parse(resultText); } catch { result = { message: resultText }; }
+    }
+    return res.json({ task, result });
+}
 
+export async function continueTask(req, res) {
+    return res.status(501).json({ error: "Task continuation is not available in this phase." });
 }
