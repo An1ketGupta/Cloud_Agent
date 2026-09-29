@@ -1,5 +1,6 @@
 import { prisma } from "../clients/prismaClient.js"
 import { taskQueue } from "../queues/taskQueue.js";
+import { logTask } from "../services/taskLogger.js";
 
 export async function NewTask(req, res) {
     try {
@@ -42,6 +43,7 @@ export async function NewTask(req, res) {
             },
             include: { conversation: true, repository: { select: { id: true, fullName: true } } },
         });
+        logTask(task.id, `Received submission for ${matches[0].fullName}.`);
 
         try {
             await taskQueue.add(
@@ -51,9 +53,12 @@ export async function NewTask(req, res) {
                 queryId: task.conversation[0].id,
                 repositoryId: matches[0].id,
                 userId: task.userId
-            }
+            },
+            { jobId: `task-${task.id}`, removeOnComplete: true, removeOnFail: 100 }
             );
+            logTask(task.id, 'Added to the worker queue.');
         } catch (queueError) {
+            logTask(task.id, `Could not queue task: ${queueError.message}`);
             await prisma.$transaction([
                 prisma.query.update({
                     where: { id: task.conversation[0].id },

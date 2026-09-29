@@ -114,16 +114,23 @@ export function checkPlan(plan) {
     return [...visited].map((id) => tasks.get(id));
 }
 
-export async function runWorkCop({ container, request }) {
-    const custodian = await runRole({
+export async function runWorkCop({ container, request, onProgress = async () => {}, roleRunner = runRole }) {
+    async function role(options) {
+        await onProgress(`${options.name} started.`);
+        const result = await roleRunner(options);
+        await onProgress(`${options.name} finished.`);
+        return result;
+    }
+
+    const custodian = await role({
         name: "Repository Custodian",
         container,
         allowedTools: READ_TOOLS,
         outputSchema: custodianSchema,
 
-        systemPrompt: `You are WorkCop's Repository Custodian for a Node.js repository.
+        systemPrompt: `You are WorkCop's Repository Custodian.
 Locate the files relevant to the user's request. Use only your listed read tools.
-Start at /workspace/repository, inspect the relevant package.json file and search code as needed.
+Start at /workspace/repository, inspect the repository structure and relevant files.
 Keep context focused.
 Return only JSON with repositorySummary, candidateFiles (repository-relative paths), and notes.
 Include likely existing files and test files; do not claim to have run anything.`,
@@ -136,14 +143,14 @@ Include likely existing files and test files; do not claim to have run anything.
 
     custodian.candidateFiles.forEach(normalizeRepositoryPath);
 
-    let plan = await runRole({
+    let plan = await role({
         name: "Manager",
         container,
         allowedTools: READ_TOOLS,
         outputSchema: managerSchema,
 
         systemPrompt: `You are WorkCop's Manager.
-Turn the user's request and Custodian findings into a small, complete plan for a Node.js repository.
+Turn the user's request and Custodian findings into a small, complete plan for the repository.
 Assign focused developer roles and explicit file-level tasks.
 Include dependencies; prefer tasks that can be executed in a clear order.
 Your plan must cover the whole issue.
@@ -162,13 +169,13 @@ No commands, tests, builds, commits, or pull requests.`,
     const kickoffFeedback = [];
 
     for (const task of plan.tasks) {
-        const feedback = await runRole({
+        const feedback = await role({
             name: `Kickoff ${task.id}`,
             container,
             allowedTools: READ_TOOLS,
             outputSchema: kickoffSchema,
 
-            systemPrompt: `You are WorkCop's ${task.role}, reviewing the Manager's Node.js implementation plan before coding.
+            systemPrompt: `You are WorkCop's ${task.role}, reviewing the Manager's implementation plan before coding.
 Check whether your assignment is feasible, the affected files are plausible, and the task order covers dependencies.
 Use only read tools.
 Return only JSON with concerns and suggestions.
@@ -194,7 +201,7 @@ Do not make changes.`,
     );
 
     if (needsPlanRevision) {
-        plan = await runRole({
+        plan = await role({
             name: "Manager Plan Revision",
             container,
             allowedTools: READ_TOOLS,
@@ -220,14 +227,14 @@ No commands, tests, builds, commits, or pull requests.`,
     const developerResults = [];
 
     for (const task of orderedTasks) {
-        const result = await runRole({
+        const result = await role({
             name: `Developer ${task.id}`,
             container,
             allowedTools: DEVELOPER_TOOLS,
             outputSchema: developerSchema,
 
             systemPrompt: `You are WorkCop's ${task.role}.
-Implement your assigned Node.js code change in /workspace/repository.
+Implement your assigned code change in /workspace/repository.
 Read relevant files, locate the correct code, and use ApplyPatch for every change, including new files.
 You may use only your listed tools.
 Do not run commands or claim that tests/builds ran.
@@ -263,7 +270,7 @@ Return only JSON with summary and changedFiles.`,
             throw new Error("Patch is too large for QA review.");
         }
 
-        review = await runRole({
+        review = await role({
             name: "QA",
             container,
             allowedTools: QA_TOOLS,
@@ -302,13 +309,13 @@ Approve only when the patch appears to satisfy the request.`,
             break;
         }
 
-        const revision = await runRole({
+        const revision = await role({
             name: "Revision Developer",
             container,
             allowedTools: DEVELOPER_TOOLS,
             outputSchema: developerSchema,
 
-            systemPrompt: `You are WorkCop's revision developer for a Node.js repository.
+            systemPrompt: `You are WorkCop's revision developer for this repository.
 Address every QA finding using your listed repository tools.
 Inspect current files, apply focused patches with ApplyPatch, and review GitDiff.
 Do not run tests/builds or claim they ran.

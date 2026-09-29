@@ -93,7 +93,7 @@ export default function TaskWorkspace({ initialUser }) {
   return (
     <div className="mt-8 border-t border-slate-200 pt-8">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div><h2 className="font-display text-2xl font-bold">Your coding workspace</h2><p className="mt-1 text-slate-500">Choose a repository, write a prompt, and review the resulting patch.</p></div>
+        <div><h2 className="font-display text-2xl font-bold">Your coding workspace</h2><p className="mt-1 text-slate-500">Choose a repository and describe the code change you want the agents to make.</p></div>
         {user.githubAccount && <button type="button" onClick={syncRepositories} className="font-bold text-blue-700 hover:underline">Refresh repositories</button>}
       </div>
 
@@ -113,34 +113,35 @@ export default function TaskWorkspace({ initialUser }) {
           <label className="grid gap-2 font-bold text-slate-700">Your prompt
             <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows="5" required placeholder="Describe the issue or change you want..." className="w-full rounded-lg border border-slate-300 bg-white px-3 py-3 font-normal" />
           </label>
-          <button type="submit" disabled={busy || !repositoryId || !prompt.trim()} className="w-fit rounded-lg bg-blue-700 px-5 py-3 font-bold text-white hover:bg-blue-800 disabled:opacity-50">{busy ? 'Starting...' : 'Run agents'}</button>
+          <button type="submit" disabled={busy || !repositoryId || !prompt.trim()} className="w-fit rounded-lg bg-blue-700 px-5 py-3 font-bold text-white hover:bg-blue-800 disabled:opacity-50">{busy ? 'Submitting...' : 'Submit task'}</button>
         </form>
       )}
 
       {error && <p className="mt-5 rounded-lg bg-red-50 p-3 text-red-800" role="alert">{error}</p>}
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <aside>
+      <div className="mt-8 grid min-w-0 gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+        <aside className="min-w-0">
           <h3 className="mb-3 font-bold">Recent tasks</h3>
           {tasks.length === 0 && <p className="text-sm text-slate-500">No tasks yet.</p>}
-          <div className="grid gap-2">{tasks.map((item) => <button key={item.id} type="button" onClick={() => { setTaskData(null); setActiveId(item.id); }} className={`rounded-lg p-3 text-left text-sm ${item.id === activeId ? 'bg-blue-50 text-blue-900' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'}`}>
-            <strong className="block truncate">{item.repository?.fullName || 'Repository'}</strong>
-            <span className="block truncate">{item.prompt}</span>
-            <span className="capitalize text-slate-500">{item.status === 'runnning' ? 'running' : item.status}</span>
+          <div className="grid min-w-0 gap-2">{tasks.map((item) => <button key={item.id} type="button" onClick={() => { setTaskData(null); setActiveId(item.id); }} className={`min-w-0 w-full rounded-lg border p-3 text-left text-sm transition-colors ${item.id === activeId ? 'border-blue-200 bg-blue-50 text-blue-900' : 'border-transparent bg-slate-50 text-slate-700 hover:bg-slate-100'}`}>
+            <strong className="block truncate" title={item.repository?.fullName || 'Repository'}>{item.repository?.fullName || 'Repository'}</strong>
+            <span className="mt-1 block truncate" title={item.prompt}>{item.prompt}</span>
+            <span className="mt-1 block text-xs font-medium capitalize text-slate-500">{item.status === 'runnning' ? 'running' : item.status}</span>
           </button>)}</div>
         </aside>
 
         <section className="min-w-0">
           {task && <>
-            <div className="mb-4 flex flex-wrap justify-between gap-3"><div><h3 className="font-display text-xl font-bold">Task #{task.id}</h3><p className="text-sm text-slate-500">{task.repository?.fullName || result?.repository} · {new Date(task.createdAt).toLocaleString()}</p></div><span className="h-fit rounded-full bg-blue-50 px-3 py-1 text-sm font-bold capitalize text-blue-800">{status}</span></div>
-            <p className="rounded-lg bg-slate-50 p-4 whitespace-pre-wrap">{task.conversation[0]?.query}</p>
-            {(status === 'pending' || status === 'running') && <p className="mt-4 text-slate-500">The agents are working. This view updates automatically.</p>}
-            {(status === 'completed' || status === 'failed') && <div className="mt-5 grid gap-5">
-              {result?.summary && <div><h4 className="mb-2 font-bold">Summary</h4><p className="whitespace-pre-wrap text-slate-700">{result.summary}</p></div>}
-              {result?.error && <p className="rounded-lg bg-red-50 p-3 text-red-800">{result.error}</p>}
-              {result?.review && <div><h4 className="mb-2 font-bold">QA review: {result.review.decision}</h4>{result.review.findings?.map((finding, index) => <p key={index}>{finding.file ? `${finding.file}: ` : ''}{finding.issue}</p>)}</div>}
-              {result?.plan && <details><summary className="cursor-pointer font-bold">Agent plan</summary><p className="mt-2">{result.plan.goal}</p><ol className="list-decimal pl-5">{result.plan.tasks.map((step) => <li key={step.id}>{step.role}: {step.instructions}</li>)}</ol></details>}
-              <div><h4 className="mb-2 font-bold">Git diff</h4>{result?.patch ? <pre className="max-h-[650px] overflow-auto rounded-lg bg-slate-950 p-4 text-xs leading-relaxed text-slate-100">{result.patch}</pre> : <p className="text-slate-500">No diff was saved for this task.</p>}</div>
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><h3 className="font-display text-xl font-bold">Task #{task.id}</h3><p className="break-words text-sm text-slate-500">{task.repository?.fullName || result?.repository} · {new Date(task.createdAt).toLocaleString()}</p></div><span className="h-fit shrink-0 rounded-full bg-blue-50 px-3 py-1 text-sm font-bold capitalize text-blue-800">{status}</span></div>
+            <p className="whitespace-pre-wrap wrap-anywhere rounded-lg bg-slate-50 p-4 leading-relaxed">{task.conversation[0]?.query}</p>
+            {(status === 'pending' || status === 'running') && <p className="mt-4 text-slate-500">The agents are preparing the repository, editing files, and reviewing the patch. This view updates automatically.</p>}
+            {(status === 'completed' || status === 'failed') && <div className="mt-5 grid min-w-0 gap-5">
+              {result?.summary && <div className="min-w-0"><h4 className="mb-2 font-bold">Summary</h4><p className="whitespace-pre-wrap wrap-anywhere leading-relaxed text-slate-700">{result.summary}</p></div>}
+              {result?.error && <p className="wrap-anywhere rounded-lg bg-red-50 p-3 text-red-800">{result.error}</p>}
+              {result?.review && <div><h4 className="mb-2 font-bold">QA review: {result.review.decision}</h4>{result.review.findings?.map((finding, index) => <p key={index} className="wrap-anywhere text-sm text-slate-700">{finding.file ? `${finding.file}: ` : ''}{finding.issue}</p>)}</div>}
+              {result?.plan && <details><summary className="cursor-pointer font-bold">Agent plan</summary><p className="mt-2 wrap-anywhere">{result.plan.goal}</p><ol className="list-decimal pl-5">{result.plan.tasks.map((step) => <li key={step.id} className="wrap-anywhere">{step.role}: {step.instructions}</li>)}</ol></details>}
+              <div className="min-w-0"><h4 className="mb-2 font-bold">Git diff</h4>{result?.patch ? <pre className="max-h-[650px] overflow-auto rounded-lg bg-slate-950 p-4 text-xs leading-relaxed text-slate-100">{result.patch}</pre> : <p className="text-slate-500">No patch was saved for this task.</p>}</div>
+              {result?.containerId && <p className="wrap-anywhere rounded-lg bg-slate-50 p-3 text-sm leading-6 text-slate-600">Container: <code>{result.containerId}</code><br />Repository path: <code>{result.repositoryRoot}</code></p>}
             </div>}
           </>}
         </section>

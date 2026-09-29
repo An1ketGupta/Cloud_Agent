@@ -20,11 +20,11 @@ export async function cloneRepository(container, repositoryId, userId) {
 
     const token = repo.githubAccount.githubAccessToken;
 
-    if (!token) {
+    if (repo.private && !token) {
         throw new Error("GitHub token not found.");
     }
 
-    const cloneUrl = `https://github.com/${repo.fullName}.git`;
+    const cloneUrl = repo.cloneUrl || `https://github.com/${repo.fullName}.git`;
 
     const result = await runContainerExec(
         container,
@@ -32,11 +32,11 @@ export async function cloneRepository(container, repositoryId, userId) {
         {
             workingDir: "/workspace",
             timeoutMs: 180000,
-            env: [
+            env: repo.private ? [
                 "GIT_CONFIG_COUNT=1",
                 "GIT_CONFIG_KEY_0=http.https://github.com/.extraheader",
                 `GIT_CONFIG_VALUE_0=AUTHORIZATION: bearer ${token}`
-            ]
+            ] : undefined
         }
     );
 
@@ -44,23 +44,9 @@ export async function cloneRepository(container, repositoryId, userId) {
         throw new Error("Failed to clone repository.");
     }
 
-    const files = await runContainerExec(
-        container,
-        ["git", "ls-files", "--cached", "--others", "--exclude-standard"]
-    );
-
-    if (files.exitCode !== 0) {
-        throw new Error("Could not read repository files.");
-    }
-
-    const fileList = files.stdout.split("\n");
-
-    const hasPackageJson = fileList.some(
-        (file) => file === "package.json" || file.endsWith("/package.json")
-    );
-
-    if (!hasPackageJson) {
-        throw new Error("Repository must contain a package.json file.");
+    const files = await runContainerExec(container, ["git", "rev-parse", "--is-inside-work-tree"]);
+    if (files.exitCode !== 0 || files.stdout.trim() !== "true") {
+        throw new Error("The repository was not cloned into the container.");
     }
 
     return {

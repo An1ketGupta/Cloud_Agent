@@ -52,7 +52,10 @@ export async function runContainerExec(
 
         container.modem.demuxStream(stream, output, error);
 
-        stream.once("error", reject);
+        stream.once("error", (error) => {
+            clearTimeout(timer);
+            reject(error);
+        });
 
         stream.once("end", () => {
             clearTimeout(timer);
@@ -64,7 +67,15 @@ export async function runContainerExec(
         }
     });
 
-    const result = await exec.inspect();
+    const deadline = Date.now() + timeoutMs;
+    let result = await exec.inspect();
+    while (result.ExitCode === null) {
+        if (Date.now() >= deadline) {
+            throw new Error(`Container operation timed out after ${timeoutMs} ms.`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        result = await exec.inspect();
+    }
 
     return {
         stdout,

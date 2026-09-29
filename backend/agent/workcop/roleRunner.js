@@ -63,15 +63,14 @@ export async function runRole({ name, systemPrompt, input, allowedTools, outputS
                     type: "function_result",
                     name: call.name,
                     call_id: call.id,
-                    result: JSON.stringify(result)
+                    result: [{ type: "text", text: JSON.stringify(result) }]
                 });
             } catch (error) {
                 results.push({
                     type: "function_result",
                     name: call.name,
                     call_id: call.id,
-                    is_error: true,
-                    result: JSON.stringify({ error: error.message })
+                    result: [{ type: "text", text: JSON.stringify({ error: error.message }) }]
                 });
             }
         }
