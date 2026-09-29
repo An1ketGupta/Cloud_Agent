@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken'
 import { prisma } from '../clients/prismaClient.js';
 import createAccessToken from './createAccessToken.js';
+import { clearAuthCookies, setAccessCookie } from './authCookies.js';
 
 export async function refreshAuthAccessToken(req,res){
     const refreshToken = req.cookies.refreshToken;
@@ -19,25 +20,15 @@ export async function refreshAuthAccessToken(req,res){
                 userId : userId
             }
         })
-        const accessToken = createAccessToken(user)
-        req.user = verified
-        
-        res.cookie("accessToken", accessToken, {
-            httpOnly : true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
-            maxAge: 10 * 60 * 1000
-        })
-        
-        req.user = verified
-
-        res.status(201).json({
-            message : "Successfully refreshed access-token"
-        })
+        if (!user) {
+            clearAuthCookies(res);
+            return res.status(401).json({ error: "Session expired." });
+        }
+        setAccessCookie(res, createAccessToken(user));
+        return res.status(200).json({ message: "Session refreshed." });
 
     } catch (error) {
-        return res.status(401).json({
-            message: "Invalid or expired refresh token"
-        });
+        clearAuthCookies(res);
+        return res.status(401).json({ error: "Session expired." });
     }
 }
