@@ -9,6 +9,7 @@ import { conversationRouter } from './routes/conversationRoutes.js';
 import { QueueEvents } from 'bullmq';
 import { logTask } from './services/taskLogger.js';
 import './workers/taskWorker.js';
+import { startIdleConversationCleanup } from './services/idleConversationContainers.js';
 
 const taskEvents = new QueueEvents('task-queue', {
     connection: { host: 'localhost', port: 6379 }
@@ -44,3 +45,4 @@ app.use('/conversations', conversationRouter)
 app.listen(3000, ()=>{
     console.log("App is listening on port 3000")
 })
+startIdleConversationCleanup();

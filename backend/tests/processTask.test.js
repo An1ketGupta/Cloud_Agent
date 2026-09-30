@@ -92,7 +92,7 @@ test("a follow-up code run uses the conversation working tree and prior messages
     const updates = [];
     job.data.conversationId = 12;
     job.data.assistantMessageId = 13;
-    dependencies.db.conversation = { async findUnique() { return { repository: { fullName: "owner/repo" } }; } };
+    dependencies.db.conversation = { async findUnique() { return { repository: { fullName: "owner/repo" } }; }, async update() {} };
     dependencies.db.message = { async update({ data }) { updates.push(data); } };
     dependencies.getContainer = async ({ conversationId }) => {
         assert.equal(conversationId, 12);

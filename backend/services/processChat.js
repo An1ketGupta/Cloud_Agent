@@ -19,7 +19,7 @@ export async function processChat(job, { db = prisma, getContainer = getConversa
             systemPrompt: `You are a coding assistant in an ongoing repository conversation.
 Answer the user's latest message directly. Read repository files when needed and ground code-specific claims in what you inspect.
 You can inspect the working tree and current diff. You cannot edit files or start code work in chat mode.
-If the user requests a code change, discuss the approach and tell them to use Make changes to run it.
+If the user requests a code change, discuss the approach and tell them to switch to Agent mode to run it.
 Return only JSON with one field: answer.`,
             input: { repositoryRoot: "/workspace/repository", history, latestMessage: query }
         });

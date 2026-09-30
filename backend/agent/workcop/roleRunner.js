@@ -3,7 +3,7 @@ import { toolDeclarations } from "../tools/toolDeclarations.js";
 import { executeFunction } from "../sandbox/executeFunction.js";
 
 const MODEL = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
-const MAX_STEPS = 30;
+const MAX_STEPS = 60;
 const ROLE_TIMEOUT_MS = 4 * 60_000;
 
 function parseResponse(text, schema) {

@@ -6,6 +6,7 @@ import { prisma } from "../clients/prismaClient.js";
 import { logTask } from "./taskLogger.js";
 import { getConversationContainer } from "./conversationContainer.js";
 import { conversationContext } from "./conversationContext.js";
+import { createFileReview } from "./fileReview.js";
 
 export async function processTask(job, {
     db = prisma,
@@ -21,6 +22,7 @@ export async function processTask(job, {
     let cloned = false;
     let resultPersisted = false;
     let keepContainer = false;
+    let beforePatch = "";
     const agentOutputs = [];
 
     async function progress(message) {
@@ -63,6 +65,7 @@ export async function processTask(job, {
         }
         cloned = true;
         await progress(`Repository ready: ${repository.repository}.`);
+        if (conversationId) beforePatch = (await readDiff(container)).patch;
 
         const request = conversationId ? `Conversation so far:\n${await getHistory(conversationId, db)}\n\nLatest code request: ${query.trim()}` : query.trim();
         const result = await runAgents({ container, request, onProgress: progress, onAgentResult });
@@ -76,11 +79,13 @@ export async function processTask(job, {
             ...result,
             agentOutputs
         };
+        if (conversationId && typeof result.patch === "string") response.fileReview = createFileReview(beforePatch, result.patch);
 
         await db.$transaction([
             db.query.update({ where: { id: queryId }, data: { response: JSON.stringify(response) } }),
             db.task.update({ where: { id: taskId }, data: { status: approved ? "completed" : "failed" } }),
-            ...(assistantMessageId ? [db.message.update({ where: { id: assistantMessageId }, data: { content: result.summary || (approved ? "Code changes completed." : "Code changes need revision."), status: approved ? "completed" : "failed" } })] : [])
+            ...(assistantMessageId ? [db.message.update({ where: { id: assistantMessageId }, data: { content: result.summary || (approved ? "Code changes completed." : "Code changes need revision."), status: approved ? "completed" : "failed" } })] : []),
+            ...(conversationId ? [db.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date(), ...(typeof result.patch === "string" ? { workingPatch: result.patch } : {}) } })] : [])
         ]);
         resultPersisted = true;
         keepContainer = approved || !!conversationId;
@@ -101,10 +106,12 @@ export async function processTask(job, {
             await db.$transaction([
                 db.query.update({
                     where: { id: queryId },
-                    data: { response: JSON.stringify({ success: false, error: error.message, patch, agentOutputs }) }
+                    data: { response: JSON.stringify({ success: false, error: error.message, patch, agentOutputs,
+                        ...(conversationId && patch !== null ? { fileReview: createFileReview(beforePatch, patch) } : {}) }) }
                 }),
                 db.task.update({ where: { id: taskId }, data: { status: "failed" } }),
-                ...(assistantMessageId ? [db.message.update({ where: { id: assistantMessageId }, data: { content: `Code work failed: ${error.message}`, status: "failed" } })] : [])
+                ...(assistantMessageId ? [db.message.update({ where: { id: assistantMessageId }, data: { content: `Code work failed: ${error.message}`, status: "failed" } })] : []),
+                ...(conversationId ? [db.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date(), ...(patch !== null ? { workingPatch: patch } : {}) } })] : [])
             ]);
         }
         throw error;

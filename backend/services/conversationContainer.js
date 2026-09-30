@@ -27,7 +27,7 @@ export async function getConversationContainer({ conversationId, repositoryId, u
             orderBy: { id: "desc" },
             include: { conversation: true }
         });
-        const previousPatch = previousTasks.map((task) => {
+        const previousPatch = conversation.workingPatch ?? previousTasks.map((task) => {
             try { return JSON.parse(task.conversation[0]?.response || "null")?.patch; } catch { return null; }
         }).find(Boolean);
         if (previousPatch) {
