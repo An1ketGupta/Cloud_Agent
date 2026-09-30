@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { authApi } from './api/authApi';
-import CloudWorkspace from './CloudWorkspace';
+import CloudWorkspace from './ConversationWorkspace';
 
 export function Brand() {
   return <div className="brand"><span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span><span>Cloud Agent</span></div>;

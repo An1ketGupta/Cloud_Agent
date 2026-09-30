@@ -82,3 +82,27 @@ test("an agent error saves a partial diff and removes the container", async () =
         agentOutputs: [{ agent: "Repository Custodian", output: { candidateFiles: ["test.js"] } }]
     });
 });
+
+test("a follow-up code run uses the conversation working tree and prior messages", async () => {
+    const { state, job, dependencies } = fixture(async ({ request }) => {
+        assert.match(request, /user \(chat\): Please fix the parser/);
+        assert.match(request, /Latest code request: Add test.js/);
+        return { approved: true, summary: "Updated parser tests", patch: "cumulative patch" };
+    });
+    const updates = [];
+    job.data.conversationId = 12;
+    job.data.assistantMessageId = 13;
+    dependencies.db.conversation = { async findUnique() { return { repository: { fullName: "owner/repo" } }; } };
+    dependencies.db.message = { async update({ data }) { updates.push(data); } };
+    dependencies.getContainer = async ({ conversationId }) => {
+        assert.equal(conversationId, 12);
+        return { container: { id: "existing-container", async remove() { state.removed = true; } } };
+    };
+    dependencies.getHistory = async () => "user (chat): Please fix the parser";
+
+    const result = await processTask(job, dependencies);
+
+    assert.equal(result.containerId, "existing-container");
+    assert.equal(state.removed, false);
+    assert.deepEqual(updates, [{ content: "Updated parser tests", status: "completed" }]);
+});

@@ -1,6 +1,7 @@
 import { prisma } from "../clients/prismaClient.js"
 import { taskQueue } from "../queues/taskQueue.js";
 import { logTask } from "../services/taskLogger.js";
+import { sendMessage } from "./conversationControllers.js";
 
 export async function NewTask(req, res) {
     try {
@@ -29,19 +30,23 @@ export async function NewTask(req, res) {
             });
         }
 
-        const task = await prisma.task.create({
-            data: {
-                userId: user.userId,
-                repositoryId: matches[0].id,
-                status: 'pending',
-                conversation: {
-                    create: {
-                        query: query.trim(),
-                        response: "",
-                    },
+        const { task, thread, assistantMessage } = await prisma.$transaction(async (tx) => {
+            const thread = await tx.conversation.create({
+                data: { userId: user.userId, repositoryId: matches[0].id, title: query.trim().slice(0, 80) }
+            });
+            const task = await tx.task.create({
+                data: {
+                    userId: user.userId,
+                    repositoryId: matches[0].id,
+                    conversationId: thread.id,
+                    status: 'pending',
+                    conversation: { create: { query: query.trim(), response: "" } },
                 },
-            },
-            include: { conversation: true, repository: { select: { id: true, fullName: true } } },
+                include: { conversation: true, repository: { select: { id: true, fullName: true } } },
+            });
+            await tx.message.create({ data: { conversationId: thread.id, role: "user", mode: "code", content: query.trim(), taskId: task.id } });
+            const assistantMessage = await tx.message.create({ data: { conversationId: thread.id, role: "assistant", mode: "code", content: "", taskId: task.id, status: "pending" } });
+            return { task, thread, assistantMessage };
         });
         logTask(task.id, `Received submission for ${matches[0].fullName}.`);
 
@@ -52,7 +57,9 @@ export async function NewTask(req, res) {
                 query: query.trim(),
                 queryId: task.conversation[0].id,
                 repositoryId: matches[0].id,
-                userId: task.userId
+                userId: task.userId,
+                conversationId: thread.id,
+                assistantMessageId: assistantMessage.id
             },
             { jobId: `task-${task.id}`, removeOnComplete: true, removeOnFail: 100 }
             );
@@ -64,7 +71,8 @@ export async function NewTask(req, res) {
                     where: { id: task.conversation[0].id },
                     data: { response: JSON.stringify({ success: false, error: "Unable to enqueue task." }) }
                 }),
-                prisma.task.update({ where: { id: task.id }, data: { status: "failed" } })
+                prisma.task.update({ where: { id: task.id }, data: { status: "failed" } }),
+                prisma.message.update({ where: { id: assistantMessage.id }, data: { content: "Unable to enqueue task.", status: "failed" } })
             ]);
             throw queueError;
         }
@@ -154,5 +162,11 @@ export async function listTasks(req, res) {
 }
 
 export async function continueTask(req, res) {
-    return res.status(501).json({ error: "Task continuation is not available in this phase." });
+    const taskId = Number(req.body.taskId);
+    if (!Number.isInteger(taskId)) return res.status(400).json({ error: "Invalid task ID." });
+    const task = await prisma.task.findFirst({ where: { id: taskId, userId: req.user.userId } });
+    if (!task?.conversationId) return res.status(404).json({ error: "Conversation not found." });
+    req.params.conversationId = String(task.conversationId);
+    req.body.content = req.body.content ?? req.body.query;
+    return sendMessage(req, res);
 }

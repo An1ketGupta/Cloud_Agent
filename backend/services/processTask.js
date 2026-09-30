@@ -4,15 +4,19 @@ import { runWorkCop } from "../agent/workcop/workCop.js";
 import { GitDiff } from "../agent/tools/gitDiff.js";
 import { prisma } from "../clients/prismaClient.js";
 import { logTask } from "./taskLogger.js";
+import { getConversationContainer } from "./conversationContainer.js";
+import { conversationContext } from "./conversationContext.js";
 
 export async function processTask(job, {
     db = prisma,
     createContainer = createAgentContainer,
     clone = cloneRepository,
     runAgents = runWorkCop,
-    readDiff = GitDiff
+    readDiff = GitDiff,
+    getContainer = getConversationContainer,
+    getHistory = conversationContext
 } = {}) {
-    const { taskId, queryId, repositoryId, userId, query } = job.data;
+    const { taskId, queryId, repositoryId, userId, query, conversationId, assistantMessageId } = job.data;
     let container;
     let cloned = false;
     let resultPersisted = false;
@@ -44,15 +48,24 @@ export async function processTask(job, {
             throw new Error("Set GEMINI_API_KEY in backend/.env before submitting agent tasks.");
         }
 
-        await progress("Starting the Node.js container.");
-        container = await createContainer();
-        await progress(`Container started: ${container.id}`);
-        await progress("Cloning the selected repository into /workspace/repository.");
-        const repository = await clone(container, repositoryId, userId);
+        let repository;
+        if (conversationId) {
+            await progress("Opening the conversation working tree.");
+            ({ container } = await getContainer({ conversationId, repositoryId, userId, db }));
+            keepContainer = true;
+            repository = { repository: (await db.conversation.findUnique({ where: { id: conversationId }, include: { repository: true } })).repository.fullName, root: "/workspace/repository" };
+        } else {
+            await progress("Starting the Node.js container.");
+            container = await createContainer();
+            await progress(`Container started: ${container.id}`);
+            await progress("Cloning the selected repository into /workspace/repository.");
+            repository = await clone(container, repositoryId, userId);
+        }
         cloned = true;
-        await progress(`Clone verified for ${repository.repository}.`);
+        await progress(`Repository ready: ${repository.repository}.`);
 
-        const result = await runAgents({ container, request: query.trim(), onProgress: progress, onAgentResult });
+        const request = conversationId ? `Conversation so far:\n${await getHistory(conversationId, db)}\n\nLatest code request: ${query.trim()}` : query.trim();
+        const result = await runAgents({ container, request, onProgress: progress, onAgentResult });
         const approved = result.approved === true;
         const response = {
             success: approved,
@@ -66,10 +79,11 @@ export async function processTask(job, {
 
         await db.$transaction([
             db.query.update({ where: { id: queryId }, data: { response: JSON.stringify(response) } }),
-            db.task.update({ where: { id: taskId }, data: { status: approved ? "completed" : "failed" } })
+            db.task.update({ where: { id: taskId }, data: { status: approved ? "completed" : "failed" } }),
+            ...(assistantMessageId ? [db.message.update({ where: { id: assistantMessageId }, data: { content: result.summary || (approved ? "Code changes completed." : "Code changes need revision."), status: approved ? "completed" : "failed" } })] : [])
         ]);
         resultPersisted = true;
-        keepContainer = approved;
+        keepContainer = approved || !!conversationId;
 
         if (!approved) {
             throw new Error(result.summary || "QA did not approve the changes.");
@@ -89,7 +103,8 @@ export async function processTask(job, {
                     where: { id: queryId },
                     data: { response: JSON.stringify({ success: false, error: error.message, patch, agentOutputs }) }
                 }),
-                db.task.update({ where: { id: taskId }, data: { status: "failed" } })
+                db.task.update({ where: { id: taskId }, data: { status: "failed" } }),
+                ...(assistantMessageId ? [db.message.update({ where: { id: assistantMessageId }, data: { content: `Code work failed: ${error.message}`, status: "failed" } })] : [])
             ]);
         }
         throw error;

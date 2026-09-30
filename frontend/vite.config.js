@@ -10,6 +10,7 @@ export default defineConfig({
       '/auth': 'http://localhost:3000',
       '/me': 'http://localhost:3000',
       '/task': 'http://localhost:3000',
+      '/conversations': 'http://localhost:3000',
     },
   },
 })

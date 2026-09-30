@@ -1,6 +1,8 @@
 import { runContainerExec } from "../sandbox/containerIO.js";
 
 export async function GitDiff(container) {
+    const stageNewFiles = await runContainerExec(container, ["git", "add", "-N", "."]);
+    if (stageNewFiles.exitCode !== 0) throw new Error(stageNewFiles.stderr || "Unable to inspect new files.");
     const result = await runContainerExec(container, ["git", "diff", "--no-ext-diff", "--", "."]);
     if (result.exitCode !== 0) {
         throw new Error(result.stderr || "Unable to read repository diff.");
