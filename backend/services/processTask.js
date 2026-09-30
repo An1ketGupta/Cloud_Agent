@@ -20,9 +20,11 @@ export async function processTask(job, {
 
     async function progress(message) {
         logTask(taskId, message);
-        await job.updateProgress(message).catch((error) => {
+        try {
+            await Promise.all([job.updateProgress(message), job.log?.(message)]);
+        } catch (error) {
             logTask(taskId, `Could not publish progress: ${error.message}`);
-        });
+        }
     }
 
     try {
@@ -66,7 +68,7 @@ export async function processTask(job, {
         await progress("QA approved the patch. Task completed; container remains running.");
         return response;
     } catch (error) {
-        logTask(taskId, `Task failed: ${error.message}`);
+        await progress(`Task failed: ${error.message}`);
         if (!resultPersisted) {
             let patch = null;
             if (cloned) {

@@ -7,6 +7,7 @@ import { myRouter } from './routes/myRoutes.js';
 import { taskRouter } from './routes/taskRoutes.js';
 import { QueueEvents } from 'bullmq';
 import { logTask } from './services/taskLogger.js';
+import './workers/taskWorker.js';
 
 const taskEvents = new QueueEvents('task-queue', {
     connection: { host: 'localhost', port: 6379 }

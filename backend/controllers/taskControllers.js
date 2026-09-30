@@ -102,7 +102,29 @@ export async function getTask(req, res) {
     if (resultText) {
         try { result = JSON.parse(resultText); } catch { result = { message: resultText }; }
     }
-    return res.json({ task, result });
+    let execution = null;
+    if (task.status === 'pending' || task.status === 'runnning') {
+        try {
+            const job = await taskQueue.getJob(`task-${task.id}`);
+            if (job) {
+                const [state, { logs }] = await Promise.all([
+                    job.getState(),
+                    taskQueue.getJobLogs(job.id, -20, -1)
+                ]);
+                execution = {
+                    state,
+                    messages: logs.length ? logs : typeof job.progress === 'string' ? [job.progress] : [],
+                    ...(state === 'failed' ? { error: job.failedReason } : {})
+                };
+            } else {
+                execution = { state: 'missing', messages: [] };
+            }
+        } catch (error) {
+            console.error(`Could not read queue state for task ${task.id}:`, error);
+            execution = { state: 'unavailable', messages: [] };
+        }
+    }
+    return res.json({ task, result, execution });
 }
 
 export async function listTasks(req, res) {
@@ -115,10 +137,20 @@ export async function listTasks(req, res) {
             repository: { select: { id: true, fullName: true } }
         }
     });
-    res.json({ tasks: tasks.map(({ conversation, ...task }) => ({
-        ...task,
-        prompt: conversation[0]?.query || ""
-    })) });
+    const recent = await Promise.all(tasks.map(async ({ conversation, ...task }) => {
+        let executionState = null;
+        if (task.status === 'pending' || task.status === 'runnning') {
+            try {
+                const job = await taskQueue.getJob(`task-${task.id}`);
+                executionState = job ? await job.getState() : 'missing';
+            } catch (error) {
+                console.error(`Could not read queue state for task ${task.id}:`, error);
+                executionState = 'unavailable';
+            }
+        }
+        return { ...task, prompt: conversation[0]?.query || "", executionState };
+    }));
+    res.json({ tasks: recent });
 }
 
 export async function continueTask(req, res) {

@@ -22,7 +22,9 @@ export function normalizeRepositoryPath(filePath) {
         absolutePath !== REPOSITORY_ROOT &&
         !absolutePath.startsWith(`${REPOSITORY_ROOT}/`)
     ) {
-        throw new Error("Path must remain inside the cloned repository.");
+        throw new Error(
+            `Path must remain inside the cloned repository: ${JSON.stringify(filePath)}`
+        );
     }
 
     const parts = path.posix

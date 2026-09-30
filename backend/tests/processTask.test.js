@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { processTask } from "../services/processTask.js";
 
 function fixture(runAgents) {
-    const state = { status: "pending", response: "", removed: false, progress: [] };
+    const state = { status: "pending", response: "", removed: false, progress: [], logs: [] };
     const container = {
         id: "test-container",
         async remove() { state.removed = true; }
@@ -15,7 +15,8 @@ function fixture(runAgents) {
     };
     const job = {
         data: { taskId: 1, queryId: 2, repositoryId: 3, userId: 4, query: "  Add test.js  " },
-        async updateProgress(message) { state.progress.push(message); }
+        async updateProgress(message) { state.progress.push(message); },
+        async log(message) { state.logs.push(message); }
     };
     const dependencies = {
         db,
@@ -42,6 +43,7 @@ test("an approved agent result saves the patch and keeps its container", async (
     assert.equal(result.patch, "complete patch");
     assert.equal(JSON.parse(state.response).review.decision, "approve");
     assert.ok(state.progress.includes("Developer finished."));
+    assert.ok(state.logs.includes("Developer finished."));
 });
 
 test("a QA rejection saves its findings and removes the container", async () => {

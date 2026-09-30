@@ -55,13 +55,13 @@ export const toolDeclarations = [
         type: "function",
         name: "ApplyPatch",
         description:
-            "Applies a Git unified diff in /workspace/repository. Read affected files first. Diff headers must use repository-relative a/ and b/ paths.",
+            "Applies a patch in /workspace/repository. Read affected files first. Prefer *** Begin Patch with *** Add File, *** Update File and @@ sections, or *** Delete File, followed by *** End Patch. Git unified diffs with repository-relative a/ and b/ paths also work.",
         parameters: {
             type: "object",
             properties: {
                 patch: {
                     type: "string",
-                    description: "The complete Git unified diff to apply."
+                    description: "The complete ApplyPatch text or Git unified diff to apply."
                 }
             },
             required: ["patch"],

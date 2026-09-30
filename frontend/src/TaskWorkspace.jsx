@@ -2,6 +2,14 @@ import { useEffect, useState } from 'react';
 import { authApi } from './api/authApi';
 import { taskApi } from './api/taskApi';
 
+function displayTaskStatus(status, queueState) {
+  if (status === 'completed' || status === 'failed') return status;
+  if (queueState === 'missing' || queueState === 'failed') return 'needs attention';
+  if (queueState === 'active' || status === 'runnning') return 'running';
+  if (['waiting', 'delayed', 'prioritized'].includes(queueState)) return 'queued';
+  return status;
+}
+
 export default function TaskWorkspace({ initialUser }) {
   const [user, setUser] = useState(initialUser);
   const [tasks, setTasks] = useState([]);
@@ -15,7 +23,17 @@ export default function TaskWorkspace({ initialUser }) {
   const repositories = user.githubAccount?.repositories || [];
   const task = taskData?.task;
   const result = taskData?.result;
+  const execution = taskData?.execution;
   const status = task?.status === 'runnning' ? 'running' : task?.status;
+  const displayStatus = displayTaskStatus(task?.status, execution?.state);
+  const statusColors = {
+    pending: 'bg-amber-50 text-amber-800',
+    queued: 'bg-amber-50 text-amber-800',
+    running: 'bg-blue-50 text-blue-800',
+    completed: 'bg-green-50 text-green-800',
+    failed: 'bg-red-50 text-red-800',
+    'needs attention': 'bg-red-50 text-red-800',
+  };
 
   async function loadProfile() {
     const { user: profile } = await authApi.getProfile();
@@ -34,6 +52,8 @@ export default function TaskWorkspace({ initialUser }) {
       setTasks(recent);
       setActiveId(recent[0]?.id || null);
     }).catch((requestError) => setError(requestError.message));
+    const timer = setInterval(() => { loadTasks().catch(() => {}); }, 8000);
+    return () => clearInterval(timer);
   }, [initialUser]);
 
   useEffect(() => {
@@ -50,6 +70,9 @@ export default function TaskWorkspace({ initialUser }) {
         const data = await taskApi.get(activeId);
         if (stopped) return;
         setTaskData(data);
+        setTasks((current) => current.map((item) => item.id === data.task.id
+          ? { ...item, status: data.task.status }
+          : item));
         if (data.task.status === 'completed' || data.task.status === 'failed') {
           loadTasks().catch(() => {});
         }
@@ -126,15 +149,31 @@ export default function TaskWorkspace({ initialUser }) {
           <div className="grid min-w-0 gap-2">{tasks.map((item) => <button key={item.id} type="button" onClick={() => { setTaskData(null); setActiveId(item.id); }} className={`min-w-0 w-full rounded-lg border p-3 text-left text-sm transition-colors ${item.id === activeId ? 'border-blue-200 bg-blue-50 text-blue-900' : 'border-transparent bg-slate-50 text-slate-700 hover:bg-slate-100'}`}>
             <strong className="block truncate" title={item.repository?.fullName || 'Repository'}>{item.repository?.fullName || 'Repository'}</strong>
             <span className="mt-1 block truncate" title={item.prompt}>{item.prompt}</span>
-            <span className="mt-1 block text-xs font-medium capitalize text-slate-500">{item.status === 'runnning' ? 'running' : item.status}</span>
+            <span className="mt-1 block text-xs font-medium capitalize text-slate-500">{item.id === activeId && task?.id === item.id ? displayStatus : displayTaskStatus(item.status, item.executionState)}</span>
           </button>)}</div>
         </aside>
 
         <section className="min-w-0">
           {task && <>
-            <div className="mb-4 flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><h3 className="font-display text-xl font-bold">Task #{task.id}</h3><p className="break-words text-sm text-slate-500">{task.repository?.fullName || result?.repository} · {new Date(task.createdAt).toLocaleString()}</p></div><span className="h-fit shrink-0 rounded-full bg-blue-50 px-3 py-1 text-sm font-bold capitalize text-blue-800">{status}</span></div>
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><h3 className="font-display text-xl font-bold">Task #{task.id}</h3><p className="break-words text-sm text-slate-500">{task.repository?.fullName || result?.repository} · {new Date(task.createdAt).toLocaleString()}</p></div><span className={`h-fit shrink-0 rounded-full px-3 py-1 text-sm font-bold capitalize ${statusColors[displayStatus] || statusColors.pending}`}>{displayStatus}</span></div>
             <p className="whitespace-pre-wrap wrap-anywhere rounded-lg bg-slate-50 p-4 leading-relaxed">{task.conversation[0]?.query}</p>
-            {(status === 'pending' || status === 'running') && <p className="mt-4 text-slate-500">The agents are preparing the repository, editing files, and reviewing the patch. This view updates automatically.</p>}
+            {(status === 'pending' || status === 'running') && <div className="mt-5 rounded-lg border border-slate-200 p-4" role="status" aria-live="polite">
+              <h4 className="font-bold">Progress</h4>
+              <p className="mt-1 text-sm text-slate-600">{execution?.state === 'missing'
+                ? 'This task is no longer in the queue. Submit it again to retry.'
+                : execution?.state === 'failed'
+                  ? execution.error || 'The queue job failed before the task status could be saved.'
+                : execution?.state === 'unavailable'
+                  ? 'Queue progress is temporarily unavailable. Retrying automatically.'
+                  : displayStatus === 'queued'
+                    ? 'Waiting for a worker to pick up this task.'
+                    : displayStatus === 'running'
+                      ? 'The agents are working on this task.'
+                      : 'Checking the queue for this task.'}</p>
+              {execution?.messages?.length > 0 && <ol className="mt-3 grid gap-2 border-l-2 border-blue-100 pl-4 text-sm text-slate-700">
+                {execution.messages.map((message, index) => <li key={`${index}-${message}`} className="wrap-anywhere">{message}</li>)}
+              </ol>}
+            </div>}
             {(status === 'completed' || status === 'failed') && <div className="mt-5 grid min-w-0 gap-5">
               {result?.summary && <div className="min-w-0"><h4 className="mb-2 font-bold">Summary</h4><p className="whitespace-pre-wrap wrap-anywhere leading-relaxed text-slate-700">{result.summary}</p></div>}
               {result?.error && <p className="wrap-anywhere rounded-lg bg-red-50 p-3 text-red-800">{result.error}</p>}
