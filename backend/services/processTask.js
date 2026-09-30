@@ -17,6 +17,7 @@ export async function processTask(job, {
     let cloned = false;
     let resultPersisted = false;
     let keepContainer = false;
+    const agentOutputs = [];
 
     async function progress(message) {
         logTask(taskId, message);
@@ -25,6 +26,14 @@ export async function processTask(job, {
         } catch (error) {
             logTask(taskId, `Could not publish progress: ${error.message}`);
         }
+    }
+
+    async function onAgentResult(agentResult) {
+        agentOutputs.push(agentResult);
+        await db.query.update({
+            where: { id: queryId },
+            data: { response: JSON.stringify({ agentOutputs }) }
+        });
     }
 
     try {
@@ -43,7 +52,7 @@ export async function processTask(job, {
         cloned = true;
         await progress(`Clone verified for ${repository.repository}.`);
 
-        const result = await runAgents({ container, request: query.trim(), onProgress: progress });
+        const result = await runAgents({ container, request: query.trim(), onProgress: progress, onAgentResult });
         const approved = result.approved === true;
         const response = {
             success: approved,
@@ -51,7 +60,8 @@ export async function processTask(job, {
             repository: repository.repository,
             repositoryRoot: repository.root,
             ...(approved ? { containerId: container.id } : {}),
-            ...result
+            ...result,
+            agentOutputs
         };
 
         await db.$transaction([
@@ -77,7 +87,7 @@ export async function processTask(job, {
             await db.$transaction([
                 db.query.update({
                     where: { id: queryId },
-                    data: { response: JSON.stringify({ success: false, error: error.message, patch }) }
+                    data: { response: JSON.stringify({ success: false, error: error.message, patch, agentOutputs }) }
                 }),
                 db.task.update({ where: { id: taskId }, data: { status: "failed" } })
             ]);

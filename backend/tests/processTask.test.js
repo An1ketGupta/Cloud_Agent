@@ -29,8 +29,10 @@ function fixture(runAgents) {
 }
 
 test("an approved agent result saves the patch and keeps its container", async () => {
-    const { state, job, dependencies } = fixture(async ({ request, onProgress }) => {
+    const { state, job, dependencies } = fixture(async ({ request, onProgress, onAgentResult }) => {
         assert.equal(request, "Add test.js");
+        await onAgentResult({ agent: "Repository Custodian", output: { candidateFiles: ["test.js"] } });
+        assert.deepEqual(JSON.parse(state.response).agentOutputs[0].output.candidateFiles, ["test.js"]);
         await onProgress("Developer finished.");
         return { approved: true, summary: "Added test.js", patch: "complete patch", review: { decision: "approve" } };
     });
@@ -42,6 +44,7 @@ test("an approved agent result saves the patch and keeps its container", async (
     assert.equal(result.containerId, "test-container");
     assert.equal(result.patch, "complete patch");
     assert.equal(JSON.parse(state.response).review.decision, "approve");
+    assert.deepEqual(JSON.parse(state.response).agentOutputs[0].output.candidateFiles, ["test.js"]);
     assert.ok(state.progress.includes("Developer finished."));
     assert.ok(state.logs.includes("Developer finished."));
 });
@@ -63,7 +66,10 @@ test("a QA rejection saves its findings and removes the container", async () => 
 });
 
 test("an agent error saves a partial diff and removes the container", async () => {
-    const { state, job, dependencies } = fixture(async () => { throw new Error("Model unavailable"); });
+    const { state, job, dependencies } = fixture(async ({ onAgentResult }) => {
+        await onAgentResult({ agent: "Repository Custodian", output: { candidateFiles: ["test.js"] } });
+        throw new Error("Model unavailable");
+    });
 
     await assert.rejects(processTask(job, dependencies), /Model unavailable/);
 
@@ -72,6 +78,7 @@ test("an agent error saves a partial diff and removes the container", async () =
     assert.deepEqual(JSON.parse(state.response), {
         success: false,
         error: "Model unavailable",
-        patch: "partial patch"
+        patch: "partial patch",
+        agentOutputs: [{ agent: "Repository Custodian", output: { candidateFiles: ["test.js"] } }]
     });
 });

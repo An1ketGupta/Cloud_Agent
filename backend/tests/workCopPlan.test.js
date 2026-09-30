@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { checkPlan, getValidatedPlan } from "../agent/workcop/workCop.js";
+import { checkPlan, getValidatedPlan, runWorkCop } from "../agent/workcop/workCop.js";
 
 const task = (file) => ({
     id: "implement",
@@ -52,4 +52,26 @@ test("an uncorrected invalid plan fails after three attempts", async () => {
         /Manager returned an invalid plan after three attempts/
     );
     assert.equal(attempts, 3);
+});
+
+test("custodian and manager outputs are published before a later agent fails", async () => {
+    const outputs = [];
+    await assert.rejects(runWorkCop({
+        container: {},
+        request: "Update the application",
+        onAgentResult: async (entry) => outputs.push(entry),
+        roleRunner: async ({ name }) => {
+            if (name === "Repository Custodian") return {
+                repositorySummary: "Small application",
+                candidateFiles: ["src/index.js"],
+                notes: []
+            };
+            if (name === "Manager") return plan("src/index.js");
+            throw new Error("Kickoff unavailable");
+        }
+    }), /Kickoff unavailable/);
+
+    assert.deepEqual(outputs.map((entry) => entry.agent), ["Repository Custodian", "Manager"]);
+    assert.deepEqual(outputs[0].output.candidateFiles, ["src/index.js"]);
+    assert.deepEqual(outputs[1].output.tasks[0].files, ["src/index.js"]);
 });

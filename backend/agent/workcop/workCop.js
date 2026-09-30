@@ -138,10 +138,11 @@ export async function getValidatedPlan(role, options) {
     throw new Error(`${options.name} returned an invalid plan after three attempts: ${validationError}`);
 }
 
-export async function runWorkCop({ container, request, onProgress = async () => {}, roleRunner = runRole }) {
+export async function runWorkCop({ container, request, onProgress = async () => {}, onAgentResult = async () => {}, roleRunner = runRole }) {
     async function role(options) {
         await onProgress(`${options.name} started.`);
         const result = await roleRunner({ ...options, onProgress });
+        await onAgentResult({ agent: options.name, output: result });
         await onProgress(`${options.name} finished.`);
         return result;
     }

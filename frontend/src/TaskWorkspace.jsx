@@ -10,6 +10,32 @@ function displayTaskStatus(status, queueState) {
   return status;
 }
 
+function AgentOutput({ entry, index }) {
+  const files = entry.agent === 'Repository Custodian'
+    ? entry.output?.candidateFiles
+    : entry.output?.changedFiles;
+
+  return <article className="min-w-0 rounded-lg border border-slate-200 bg-white p-4">
+    <h5 className="font-bold text-slate-800">{index + 1}. {entry.agent}</h5>
+    {entry.output?.repositorySummary && <p className="mt-2 whitespace-pre-wrap wrap-anywhere text-sm text-slate-700">{entry.output.repositorySummary}</p>}
+    {entry.output?.goal && <p className="mt-2 whitespace-pre-wrap wrap-anywhere text-sm text-slate-700">Goal: {entry.output.goal}</p>}
+    {entry.output?.summary && <p className="mt-2 whitespace-pre-wrap wrap-anywhere text-sm text-slate-700">{entry.output.summary}</p>}
+    {files?.length > 0 && <div className="mt-2 text-sm text-slate-700">
+      <strong>{entry.agent === 'Repository Custodian' ? 'Selected files' : 'Changed files'}</strong>
+      <ul className="mt-1 list-disc pl-5">{files.map((file) => <li key={file} className="wrap-anywhere"><code>{file}</code></li>)}</ul>
+    </div>}
+    {entry.output?.acceptanceCriteria?.length > 0 && <div className="mt-2 text-sm text-slate-700"><strong>Acceptance criteria</strong>
+      <ul className="mt-1 list-disc pl-5">{entry.output.acceptanceCriteria.map((criterion, itemIndex) => <li key={itemIndex} className="wrap-anywhere">{criterion}</li>)}</ul>
+    </div>}
+    {entry.output?.tasks?.length > 0 && <div className="mt-2 text-sm text-slate-700"><strong>Assignments</strong>
+      <ol className="mt-1 list-decimal pl-5">{entry.output.tasks.map((step) => <li key={step.id} className="mb-2 wrap-anywhere"><strong>{step.role} ({step.id}):</strong> {step.instructions}<br />Files: {step.files.join(', ')}{step.dependencies.length > 0 && <> · After: {step.dependencies.join(', ')}</>}</li>)}</ol>
+    </div>}
+    <details className="mt-3 text-sm"><summary className="cursor-pointer font-medium text-blue-700">Full agent output</summary>
+      <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap wrap-anywhere rounded-lg bg-slate-50 p-3 text-xs text-slate-700">{JSON.stringify(entry.output, null, 2)}</pre>
+    </details>
+  </article>;
+}
+
 export default function TaskWorkspace({ initialUser }) {
   const [user, setUser] = useState(initialUser);
   const [tasks, setTasks] = useState([]);
@@ -173,6 +199,10 @@ export default function TaskWorkspace({ initialUser }) {
               {execution?.messages?.length > 0 && <ol className="mt-3 grid gap-2 border-l-2 border-blue-100 pl-4 text-sm text-slate-700">
                 {execution.messages.map((message, index) => <li key={`${index}-${message}`} className="wrap-anywhere">{message}</li>)}
               </ol>}
+            </div>}
+            {result?.agentOutputs?.length > 0 && <div className="mt-5 min-w-0">
+              <h4 className="mb-3 font-bold">Agent results</h4>
+              <div className="grid gap-3">{result.agentOutputs.map((entry, index) => <AgentOutput key={`${entry.agent}-${index}`} entry={entry} index={index} />)}</div>
             </div>}
             {(status === 'completed' || status === 'failed') && <div className="mt-5 grid min-w-0 gap-5">
               {result?.summary && <div className="min-w-0"><h4 className="mb-2 font-bold">Summary</h4><p className="whitespace-pre-wrap wrap-anywhere leading-relaxed text-slate-700">{result.summary}</p></div>}
