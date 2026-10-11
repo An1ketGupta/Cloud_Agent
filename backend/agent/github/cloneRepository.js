@@ -1,5 +1,6 @@
 import { prisma } from "../../clients/prismaClient.js";
 import { REPOSITORY_ROOT, runContainerExec } from "../sandbox/containerIO.js";
+import { githubGitEnvironment } from "../../services/githubGitEnvironment.js";
 
 export async function cloneRepository(container, repositoryId, userId) {
     const repo = await prisma.githubRepository.findFirst({
@@ -32,11 +33,7 @@ export async function cloneRepository(container, repositoryId, userId) {
         {
             workingDir: "/workspace",
             timeoutMs: 180000,
-            env: repo.private ? [
-                "GIT_CONFIG_COUNT=1",
-                "GIT_CONFIG_KEY_0=http.https://github.com/.extraheader",
-                `GIT_CONFIG_VALUE_0=AUTHORIZATION: bearer ${token}`
-            ] : undefined
+            env: repo.private ? githubGitEnvironment(token) : undefined
         }
     );
 

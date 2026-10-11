@@ -4,8 +4,8 @@ import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 
-export const MAX_BATCH_BYTES = 250_000;
-export const MAX_FILE_BYTES = 1_000_000;
+const MAX_BATCH_BYTES = 250_000;
+const MAX_FILE_BYTES = 1_000_000;
 
 export class FileOperationError extends Error {
     constructor(code, message, details = {}) {

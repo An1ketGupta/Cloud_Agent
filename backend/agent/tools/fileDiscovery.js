@@ -10,11 +10,7 @@ const paging = {
 const directory = z.string().max(4096);
 export const discoverySchemas = {
     getFileNameList: z.object({ filePath: directory.default("."), ...paging }).strict(),
-    SearchFile: z.union([
-        z.object({ query: z.string().min(1).max(300), directory: directory.default("."), ...paging }).strict(),
-        // Keep existing callers working; Gemini sees only the new, explicit schema.
-        z.object({ filePath: directory.min(1), ...paging }).strict()
-    ])
+    SearchFile: z.object({ query: z.string().min(1).max(300), directory: directory.default("."), ...paging }).strict()
 };
 
 function normalizeDirectory(value) {
@@ -30,18 +26,11 @@ export function parseDiscoveryArguments(name, input) {
     if (name === "getFileNameList") {
         return { filePath: normalizeDirectory(args.filePath), limit: args.limit ?? 200, offset: args.offset };
     }
-    if (args.filePath !== undefined) {
-        const absolute = normalizeRepositoryPath(args.filePath.replaceAll("\\", "/"));
-        return {
-            query: path.posix.basename(absolute), directory: normalizeDirectory(path.posix.dirname(absolute)),
-            limit: args.limit ?? 100, offset: args.offset, exact: true
-        };
-    }
     const query = args.query.replaceAll("\\", "/");
     if (!query.trim() || query.includes("\0") || query.startsWith("/") || /^[a-z]:/i.test(query) || query.split("/").includes("..")) {
         throw new Error("SearchFile query must be a filename, relative path fragment, or glob such as **/*.js. Use directory to set the search root.");
     }
-    return { query, directory: normalizeDirectory(args.directory), limit: args.limit ?? 100, offset: args.offset, exact: false };
+    return { query, directory: normalizeDirectory(args.directory), limit: args.limit ?? 100, offset: args.offset };
 }
 
 function childDirectories(files, directory) {
@@ -124,7 +113,6 @@ export function discoverFiles(files, args, search = false) {
     const matches = search ? scoped.filter((file) => {
         const relative = file.slice(prefix.length);
         const target = args.query.includes("/") ? relative : path.posix.basename(file);
-        if (args.exact) return target === args.query;
         return glob ? matchesGlob(glob, target.toLowerCase()) : target.toLowerCase().includes(args.query.toLowerCase());
     }) : scoped;
     const page = matches.slice(args.offset, args.offset + args.limit);

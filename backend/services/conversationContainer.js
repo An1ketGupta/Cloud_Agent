@@ -13,7 +13,7 @@ export async function getConversationContainer({ conversationId, repositoryId, u
             const existing = docker.getContainer(conversation.containerId);
             const info = await existing.inspect();
             if (!info.State.Running) await existing.start();
-            return { container: existing, reused: true };
+            return { container: existing };
         } catch (error) {
             if (error.statusCode !== 404) throw error;
         }
@@ -22,14 +22,17 @@ export async function getConversationContainer({ conversationId, repositoryId, u
     const container = await createContainer();
     try {
         await clone(container, repositoryId, userId);
-        const previousTasks = await db.task.findMany({
-            where: { conversationId, status: { in: ["completed", "failed"] } },
-            orderBy: { id: "desc" },
-            include: { conversation: true }
-        });
-        const previousPatch = conversation.workingPatch ?? previousTasks.map((task) => {
-            try { return JSON.parse(task.conversation[0]?.response || "null")?.patch; } catch { return null; }
-        }).find(Boolean);
+        let previousPatch = conversation.workingPatch;
+        if (previousPatch == null) {
+            const previousTasks = await db.task.findMany({
+                where: { conversationId, status: { in: ["completed", "failed"] } },
+                orderBy: { id: "desc" },
+                include: { conversation: true }
+            });
+            previousPatch = previousTasks.map((task) => {
+                try { return JSON.parse(task.conversation[0]?.response || "null")?.patch; } catch { return null; }
+            }).find(Boolean);
+        }
         if (previousPatch) {
             const applied = await runContainerExec(container, ["git", "apply", "--whitespace=nowarn", "-"], {
                 input: previousPatch, timeoutMs: 60_000
@@ -37,7 +40,7 @@ export async function getConversationContainer({ conversationId, repositoryId, u
             if (applied.exitCode !== 0) throw new Error("Could not restore previous code changes in this conversation.");
         }
         await db.conversation.update({ where: { id: conversationId }, data: { containerId: container.id } });
-        return { container, reused: false };
+        return { container };
     } catch (error) {
         await container.remove({ force: true }).catch(() => {});
         throw error;

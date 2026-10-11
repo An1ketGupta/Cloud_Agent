@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { authApi } from './api/authApi';
 import ConversationWorkspace from './ConversationWorkspace';
-import { Terminal, GitBranch, ShieldCheck, Sparkles, ArrowRight } from 'lucide-react';
+import { Terminal, GitBranch, ShieldCheck, Sparkles } from 'lucide-react';
 
-export function Brand({ size = 'default' }) {
+function Brand({ size = 'default' }) {
   const isLarge = size === 'large';
   return (
     <div className="flex items-center gap-2.5 font-semibold tracking-[-0.03em] select-none">
@@ -74,7 +74,7 @@ function AuthForm({ mode, onModeChange, onSubmit, busy, error, notice }) {
                 <div className="w-5 h-5 rounded-full bg-white/[0.05] border border-white/[0.08] flex items-center justify-center text-[#828fff]">
                   <ShieldCheck className="w-3 h-3" />
                 </div>
-                <span>Automated quality assurance and sanity testing runs</span>
+                <span>Automated code inspection and quality assurance reviews</span>
               </div>
             </div>
           </div>

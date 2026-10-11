@@ -67,7 +67,7 @@ const QA_TOOLS = [
     "GitDiff"
 ];
 
-export function checkPlan(plan) {
+function checkPlan(plan) {
     const ids = new Set(plan.tasks.map((task) => task.id));
 
     if (ids.size !== plan.tasks.length) {
@@ -118,7 +118,7 @@ export function checkPlan(plan) {
     return [...visited].map((id) => tasks.get(id));
 }
 
-export async function getValidatedPlan(role, options) {
+async function getValidatedPlan(role, options) {
     let validationError;
     let invalidPlan;
 

@@ -44,7 +44,7 @@ export function createDiscoveryGuard({ container, allowedTools, toolExecutor, re
                 discoveryCalls++;
                 try {
                     const canonical = parseDiscoveryArguments(call.name, call.arguments);
-                    if (call.name === "SearchFile" && !canonical.exact) canonical.query = canonical.query.toLowerCase();
+                    if (call.name === "SearchFile") canonical.query = canonical.query.toLowerCase();
                     key = `${call.name}:${stableKey(canonical)}`;
                 } catch (error) {
                     argumentError = error;

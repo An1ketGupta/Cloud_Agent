@@ -1,5 +1,5 @@
 import axios from "axios";
-import crypto from "crypto"
+import crypto from "node:crypto"
 import { prisma } from "../clients/prismaClient.js";
 import { startGithubRepositorySync } from "../services/githubRepositorySync.js";
 
@@ -48,7 +48,7 @@ export async function getGithubAccessToken(req, res) {
                 }
             })
 
-        const tokenData = await response.data
+        const tokenData = response.data
         const githubAccessToken = tokenData.access_token
         const githubRefreshToken = tokenData.refresh_token || ""
         if (!githubAccessToken) throw new Error("GitHub did not return an access token.");
