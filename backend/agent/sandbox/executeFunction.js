@@ -6,15 +6,14 @@ import { SearchContent } from "../tools/searchContent.js";
 import { GitDiff } from "../tools/gitDiff.js";
 import { validateExistingPath } from "../tools/repositoryPath.js";
 import { z } from "zod";
-import path from "node:path";
+import { discoverySchemas } from "../tools/fileDiscovery.js";
 
 const pathArgs = z.object({
     filePath: z.string().min(1)
 }).strict();
 
 const schemas = {
-    getFileNameList: pathArgs,
-    SearchFile: pathArgs,
+    ...discoverySchemas,
     ReadFile: pathArgs,
     ApplyPatch: z.object({
         patch: z.string().min(1)
@@ -48,17 +47,13 @@ export async function executeFunction(functionCall, container, allowedTools = []
 
     const args = schema.parse(functionCall.arguments);
 
-    if (args.filePath) {
-        const filePath = functionName === "SearchFile"
-            ? path.posix.dirname(args.filePath)
-            : args.filePath;
-
-        await validateExistingPath(container, filePath);
+    if (functionName === "ReadFile") {
+        args.filePath = await validateExistingPath(container, args.filePath);
     }
 
     const functions = {
-        getFileNameList: () => getFileNameList(container, args.filePath),
-        SearchFile: () => SearchFile(container, args.filePath),
+        getFileNameList: () => getFileNameList(container, args),
+        SearchFile: () => SearchFile(container, args),
         ReadFile: () => ReadFile(container, args.filePath),
         ApplyPatch: () => ApplyPatch(container, args.patch),
         SearchContent: () => SearchContent(container, args.query),

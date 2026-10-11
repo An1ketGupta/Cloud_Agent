@@ -16,10 +16,8 @@ const taskEvents = new QueueEvents('task-queue', {
 });
 const taskIdFromJobId = (jobId) => String(jobId).startsWith('task-') ? String(jobId).slice(5) : null;
 
-taskEvents.on('progress', ({ jobId, data }) => {
-    const taskId = taskIdFromJobId(jobId);
-    if (taskId) logTask(taskId, data);
-});
+// The worker logs progress when it publishes it. Logging the same Redis event
+// here duplicates every line when the worker runs in this process.
 taskEvents.on('completed', ({ jobId }) => {
     const taskId = taskIdFromJobId(jobId);
     if (taskId) logTask(taskId, 'Repository container is ready.');

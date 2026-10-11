@@ -1,4 +1,5 @@
 import { Writable } from "node:stream";
+import { StringDecoder } from "node:string_decoder";
 
 export const REPOSITORY_ROOT = "/workspace/repository";
 
@@ -28,6 +29,8 @@ export async function runContainerExec(
 
     let stdout = "";
     let stderr = "";
+    const stdoutDecoder = new StringDecoder("utf8");
+    const stderrDecoder = new StringDecoder("utf8");
 
     await new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
@@ -38,14 +41,14 @@ export async function runContainerExec(
 
         const output = new Writable({
             write(chunk, encoding, callback) {
-                stdout += chunk.toString();
+                stdout += stdoutDecoder.write(chunk);
                 callback();
             }
         });
 
         const error = new Writable({
             write(chunk, encoding, callback) {
-                stderr += chunk.toString();
+                stderr += stderrDecoder.write(chunk);
                 callback();
             }
         });
@@ -67,6 +70,8 @@ export async function runContainerExec(
         }
     });
 
+    stdout += stdoutDecoder.end();
+    stderr += stderrDecoder.end();
     const deadline = Date.now() + timeoutMs;
     let result = await exec.inspect();
     while (result.ExitCode === null) {

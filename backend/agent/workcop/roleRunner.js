@@ -1,6 +1,7 @@
 import { geminiClient } from "../../clients/geminiClient.js";
-import { toolDeclarations } from "../tools/toolDeclarations.js";
+import { toolDeclarations, FILE_DISCOVERY_INSTRUCTIONS } from "../tools/toolDeclarations.js";
 import { executeFunction } from "../sandbox/executeFunction.js";
+import { createDiscoveryGuard } from "./discoveryGuard.js";
 
 const MODEL = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
 const MAX_STEPS = 60;
@@ -29,14 +30,22 @@ async function createInteraction(params, client, signal) {
 
 export async function runRole({ name, systemPrompt, input, allowedTools, outputSchema, container,
     client = geminiClient, toolExecutor = executeFunction, onProgress = async () => {} }) {
-    const tools = toolDeclarations.filter((tool) => allowedTools.includes(tool.name));
+    const guard = createDiscoveryGuard({ container, allowedTools, toolExecutor, repositoryInventory: input?.repositoryInventory });
+    const prompt = () => `${systemPrompt}\n\n${FILE_DISCOVERY_INSTRUCTIONS}${guard.disabled
+        ? `\n${guard.disabledReason} Do not call getFileNameList or SearchFile.` : ""}`;
+    const toolConfig = () => {
+        const tools = toolDeclarations.filter((tool) => guard.availableTools.includes(tool.name));
+        return tools.length ? { tools, generation_config: { tool_choice: "validated" } }
+            : { generation_config: { tool_choice: "none" } };
+    };
     let formatRetryUsed = false;
     const signal = AbortSignal.timeout(ROLE_TIMEOUT_MS);
+    if (guard.disabled) await onProgress(`${name}: Using the complete repository inventory; filename discovery is disabled.`);
     let interaction = await createInteraction({
         model: MODEL,
-        system_instruction: systemPrompt,
+        system_instruction: prompt(),
         input: JSON.stringify(input),
-        ...(tools.length ? { tools } : {})
+        ...toolConfig()
     }, client, signal);
 
     for (let step = 0; step < MAX_STEPS; step++) {
@@ -51,41 +60,39 @@ export async function runRole({ name, systemPrompt, input, allowedTools, outputS
                 interaction = await createInteraction({
                     model: MODEL,
                     previous_interaction_id: interaction.id,
-                    system_instruction: systemPrompt,
+                    system_instruction: prompt(),
                     input: `Your last response did not match the required JSON shape: ${error.message}. Return only corrected JSON.`,
-                    ...(tools.length ? { tools } : {})
+                    ...toolConfig(),
+                    generation_config: { tool_choice: "none" }
                 }, client, signal);
                 continue;
             }
         }
         const results = [];
         for (const call of calls) {
-            await onProgress(`${name}: ${call.name} started.`);
-            try {
-                const result = await toolExecutor(call, container, allowedTools);
-                await onProgress(`${name}: ${call.name} finished.`);
-                results.push({
-                    type: "function_result",
-                    name: call.name,
-                    call_id: call.id,
-                    result: [{ type: "text", text: JSON.stringify(result) }]
-                });
-            } catch (error) {
-                await onProgress(`${name}: ${call.name} failed: ${error.message}`);
-                results.push({
-                    type: "function_result",
-                    name: call.name,
-                    call_id: call.id,
-                    result: [{ type: "text", text: JSON.stringify({ error: error.message }) }]
-                });
-            }
+            const discovery = call.name === "getFileNameList" || call.name === "SearchFile";
+            const detail = discovery || call.name === "ReadFile" ? ` ${JSON.stringify(call.arguments ?? {}).slice(0, 500)}` : "";
+            await onProgress(`${name}: ${call.name}${detail} started.`);
+            const wasDisabled = guard.disabled;
+            const response = await guard.execute(call);
+            const counts = response.value?.totalMatches !== undefined
+                ? ` (${response.value.returnedCount}/${response.value.totalMatches} files; nextOffset=${response.value.nextOffset})` : "";
+            await onProgress(`${name}: ${call.name} ${response.isError ? `failed: ${response.value.error}` : "finished."}${counts}${response.cached ? " Reused cached result." : ""}`);
+            if (!wasDisabled && guard.disabled) await onProgress(`${name}: File discovery disabled after repeated calls or the discovery budget; continuing with other tools.`);
+            results.push({
+                type: "function_result",
+                name: call.name,
+                call_id: call.id,
+                ...(response.isError ? { is_error: true } : {}),
+                result: [{ type: "text", text: JSON.stringify(response.value) }]
+            });
         }
         interaction = await createInteraction({
             model: MODEL,
             previous_interaction_id: interaction.id,
-            system_instruction: systemPrompt,
+            system_instruction: prompt(),
             input: results,
-            ...(tools.length ? { tools } : {})
+            ...toolConfig()
         }, client, signal);
     }
     throw new Error(`${name} exceeded ${MAX_STEPS} tool rounds.`);

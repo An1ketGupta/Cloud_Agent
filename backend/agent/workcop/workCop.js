@@ -2,13 +2,15 @@ import { z } from "zod";
 import { runRole } from "./roleRunner.js";
 import { GitDiff } from "../tools/gitDiff.js";
 import { normalizeRepositoryPath } from "../tools/repositoryPath.js";
+import { getFileNameList } from "../tools/getFiles.js";
 
 const filePath = z.string().min(1);
 
 const custodianSchema = z.object({
     repositorySummary: z.string().min(1),
     candidateFiles: z.array(filePath).max(30),
-    notes: z.array(z.string()).default([])
+    notes: z.array(z.string()).default([]),
+    blockedReason: z.string().min(1).nullable().default(null)
 });
 
 const taskSchema = z.object({
@@ -138,10 +140,20 @@ export async function getValidatedPlan(role, options) {
     throw new Error(`${options.name} returned an invalid plan after three attempts: ${validationError}`);
 }
 
-export async function runWorkCop({ container, request, onProgress = async () => {}, onAgentResult = async () => {}, roleRunner = runRole }) {
+export async function runWorkCop({ container, request, onProgress = async () => {}, onAgentResult = async () => {}, roleRunner = runRole,
+    inventoryReader = getFileNameList, diffReader = GitDiff }) {
+    await onProgress("Reading the repository file inventory.");
+    let repositoryInventory = await inventoryReader(container, { filePath: ".", limit: 500, offset: 0 });
+    await onProgress(`Repository inventory: ${repositoryInventory.returnedCount}/${repositoryInventory.totalMatches} files; directories=${JSON.stringify(repositoryInventory.directories)}; files=${JSON.stringify(repositoryInventory.files.slice(0, 30))}.`);
+    let inventoryDirty = false;
     async function role(options) {
+        if (inventoryDirty) {
+            repositoryInventory = await inventoryReader(container, { filePath: ".", limit: 500, offset: 0 });
+            inventoryDirty = false;
+        }
         await onProgress(`${options.name} started.`);
-        const result = await roleRunner({ ...options, onProgress });
+        const result = await roleRunner({ ...options, input: { ...options.input, repositoryInventory }, onProgress });
+        if (options.allowedTools.includes("ApplyPatch")) inventoryDirty = true;
         await onAgentResult({ agent: options.name, output: result });
         await onProgress(`${options.name} finished.`);
         return result;
@@ -155,10 +167,12 @@ export async function runWorkCop({ container, request, onProgress = async () => 
 
         systemPrompt: `You are WorkCop's Repository Custodian.
 Locate the files relevant to the user's request. Use only your listed read tools.
-Start at /workspace/repository, inspect the repository structure and relevant files.
+Use the supplied repositoryInventory, inspect relevant files with ReadFile, and stop discovery as soon as paths are known.
 Keep context focused.
-Return only JSON with repositorySummary, candidateFiles (repository-relative paths), and notes.
-Include likely existing files and test files; do not claim to have run anything.`,
+Return only JSON with repositorySummary, candidateFiles (existing repository-relative paths), notes, and blockedReason (null when work can proceed).
+If the request needs an existing application's source but the inventory and file contents show it is absent, set blockedReason explaining the missing source and asking the user to select the correct repository. Do not invent missing files or plan a replacement application. Requests to create a new application may proceed.
+If the inventory is truncated, inspect remaining pages or use focused filename searches before concluding that required source is absent.
+Include existing relevant source and test files; do not claim to have run anything.`,
 
         input: {
             request,
@@ -167,6 +181,9 @@ Include likely existing files and test files; do not claim to have run anything.
     });
 
     custodian.candidateFiles.forEach(normalizeRepositoryPath);
+    if (custodian.blockedReason) {
+        throw new Error(`Requested source files are unavailable in the selected repository: ${custodian.blockedReason}`);
+    }
 
     let plan = await getValidatedPlan(role, {
         name: "Manager",
@@ -177,6 +194,7 @@ Include likely existing files and test files; do not claim to have run anything.
         systemPrompt: `You are WorkCop's Manager.
 Turn the user's request and Custodian findings into a small, complete plan for the repository.
 Assign focused developer roles and explicit file-level tasks.
+Use the supplied repositoryInventory and Custodian findings; do not repeat repository exploration. Plan implementation tasks that change code, not separate discovery tasks. Match the repository's actual language and structure; a plain HTML/CSS/JavaScript project does not imply an existing Node.js backend. Prefer one implementation task for small changes.
 Include dependencies; prefer tasks that can be executed in a clear order.
 Your plan must cover the whole issue.
 Every file path must be relative to /workspace/repository (for example src/index.js), or an absolute path inside that directory. If validationError is present, correct the plan before responding.
@@ -202,6 +220,7 @@ No commands, tests, builds, commits, or pull requests.`,
             systemPrompt: `You are WorkCop's ${task.role}, reviewing the Manager's implementation plan before coding.
 Check whether your assignment is feasible, the affected files are plausible, and the task order covers dependencies.
 Use only read tools.
+Use the supplied repositoryInventory and inspect only files needed to check your assignment. Do not repeat broad discovery.
 Return only JSON with concerns and suggestions.
 Do not make changes.`,
 
@@ -232,7 +251,7 @@ Do not make changes.`,
             outputSchema: managerSchema,
 
             systemPrompt: `You are WorkCop's Manager.
-Review developer kickoff feedback and finalize a complete, feasible Node.js implementation plan.
+Review developer kickoff feedback and finalize a complete, feasible implementation plan for the repository's actual stack.
 Resolve conflicts and dependencies.
 Every file path must be relative to /workspace/repository (for example src/index.js), or an absolute path inside that directory. If validationError is present, correct the plan before responding.
 Return only JSON with goal, acceptanceCriteria, and tasks.
@@ -286,7 +305,7 @@ Return only JSON with summary and changedFiles.`,
     let review;
 
     for (let attempt = 0; attempt < 3; attempt++) {
-        const diff = await GitDiff(container);
+        const diff = await diffReader(container);
 
         if (!diff.patch) {
             throw new Error("Developers completed without applying a patch.");
@@ -364,7 +383,7 @@ Return only JSON with summary and changedFiles.`,
         });
     }
 
-    const finalDiff = await GitDiff(container);
+    const finalDiff = await diffReader(container);
 
     return {
         approved: false,
