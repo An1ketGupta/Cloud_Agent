@@ -22,7 +22,7 @@ export async function listConversations(req, res) {
         where: { userId: req.user.userId },
         orderBy: { updatedAt: "desc" },
         take: 50,
-        include: { repository: { select: repositorySelect }, messages: { orderBy: { id: "desc" }, take: 1 } }
+        include: { repository: { select: repositorySelect } }
     });
     res.json({ conversations });
 }

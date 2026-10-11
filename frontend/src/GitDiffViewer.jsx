@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { parseGitDiff } from './parseGitDiff';
-import { ChevronDown, ChevronRight, FileCode, Check, X, Undo, GitCommit } from 'lucide-react';
+import { Check, X, Undo, GitCommit } from 'lucide-react';
 
 function fileLabel(path) {
   const extension = path.split('.').pop()?.toUpperCase();

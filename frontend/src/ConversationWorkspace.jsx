@@ -12,23 +12,17 @@ import {
   ArrowLeft, 
   Send, 
   Sparkles, 
-  Bot, 
   CheckCircle2, 
-  AlertCircle, 
   Loader2, 
   RefreshCw, 
   LogOut, 
   Menu, 
   X, 
-  ExternalLink,
   Code2,
   Terminal,
   ShieldAlert,
-  GitPullRequest,
   Bug,
-  TestTube2,
-  FileCode2,
-  Cpu
+  TestTube2
 } from 'lucide-react';
 
 function RunDetails({ task, execution, onFileDecision, reviewingFile }) {
@@ -425,7 +419,7 @@ export default function ConversationWorkspace({
       icon: Code2,
       category: 'Feature Development',
       title: 'Implement feature or API endpoint',
-      description: 'Describe requirements in plain language and get an end-to-end pull request with clean diffs.',
+      description: 'Describe requirements in plain language and review the resulting code changes in an interactive diff.',
       mode: 'code',
       prompt: 'Implement a new feature with complete error handling, validation, and corresponding test coverage.',
     },
@@ -522,9 +516,6 @@ export default function ConversationWorkspace({
           >
             <span className="flex items-center gap-2">
               <Plus className="w-3.5 h-3.5 text-[#828fff]" /> New task
-            </span>
-            <span className="text-[10px] text-[#62666d] font-mono group-hover:text-[#8a8f98]">
-              ⌘N
             </span>
           </button>
 
@@ -646,7 +637,7 @@ export default function ConversationWorkspace({
                   Solve issues directly in your repository
                 </h1>
                 <p className="text-[#8a8f98] text-sm sm:text-base leading-relaxed">
-                  Choose a repository, provide a prompt, and the agent executes in a container sandbox, tests the changes, and generates an interactive diff.
+                  Choose a repository, provide a prompt, and the agent edits code in a container sandbox, reviews the changes, and generates an interactive diff.
                 </p>
               </div>
 

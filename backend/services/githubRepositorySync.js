@@ -16,7 +16,7 @@ function githubHeaders(accessToken) {
     };
 }
 
-export async function fetchGithubRepositories(accessToken) {
+async function fetchGithubRepositories(accessToken) {
     const repositories = [];
 
     for (let page = 1; ; page += 1) {
@@ -36,7 +36,7 @@ export async function fetchGithubRepositories(accessToken) {
     }
 }
 
-export async function upsertGithubRepositories(githubAccountId, repositories) {
+async function upsertGithubRepositories(githubAccountId, repositories) {
     for (let start = 0; start < repositories.length; start += UPSERT_BATCH_SIZE) {
         const batch = repositories.slice(start, start + UPSERT_BATCH_SIZE);
         const rows = batch.map((repository) => Prisma.sql`(
@@ -79,7 +79,7 @@ export async function upsertGithubRepositories(githubAccountId, repositories) {
     return repositories.length;
 }
 
-export function syncGithubRepositories({ githubAccountId, accessToken }) {
+function syncGithubRepositories({ githubAccountId, accessToken }) {
     const currentSync = activeSyncs.get(githubAccountId);
     if (currentSync) {
         return currentSync;

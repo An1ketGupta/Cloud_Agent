@@ -4,7 +4,7 @@ import { taskQueue } from "../queues/taskQueue.js";
 
 const IDLE_MS = 15 * 60_000;
 
-export async function removeIdleConversationContainers({ db = prisma, docker = dockerClient, queue = taskQueue, now = new Date() } = {}) {
+async function removeIdleConversationContainers({ db = prisma, docker = dockerClient, queue = taskQueue, now = new Date() } = {}) {
     const cutoff = new Date(now.getTime() - IDLE_MS);
     const candidates = await db.conversation.findMany({
         where: { containerId: { not: null }, updatedAt: { lte: cutoff } },

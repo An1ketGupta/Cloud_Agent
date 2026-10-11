@@ -22,6 +22,7 @@ export function repository(t, files = {}) {
         return result.stdout;
     };
     git("init", "--quiet", "--template=");
+    git("config", "core.autocrlf", "false");
     for (const [name, content] of Object.entries(files)) {
         fs.mkdirSync(path.dirname(path.join(root, name)), { recursive: true });
         fs.writeFileSync(path.join(root, name), content);
@@ -53,7 +54,7 @@ export function localContainer(root) {
             let exitCode = null;
             return {
                 async start() {
-                    child = spawn(process.execPath, Cmd.slice(1), { cwd: root, stdio: "pipe" });
+                    child = spawn(Cmd[0] === "node" ? process.execPath : Cmd[0], Cmd.slice(1), { cwd: root, stdio: "pipe" });
                     child.on("exit", (code) => { exitCode = code; });
                     const stream = Duplex.from({ readable: child.stdout, writable: child.stdin });
                     children.set(stream, child);

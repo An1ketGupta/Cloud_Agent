@@ -15,12 +15,8 @@ export async function MyProfile(req,res){
                 last_name: true,
                 githubAccount: {
                     select: {
-                        id: true,
-                        userId: true,
-                        githubUserId: true,
                         githubUsername: true,
-                        githubAvatarUrl: true,
-                        repositories: true
+                        repositories: { select: { id: true, fullName: true } }
                     }
                 }
             }
@@ -32,22 +28,8 @@ export async function MyProfile(req,res){
             })
         }
 
-        const profile = {
-            ...user,
-            githubAccount: user.githubAccount
-                ? {
-                    ...user.githubAccount,
-                    githubUserId: user.githubAccount.githubUserId.toString(),
-                    repositories: user.githubAccount.repositories.map((repository) => ({
-                        ...repository,
-                        githubRepoId: repository.githubRepoId.toString()
-                    }))
-                }
-                : null
-        }
-
         res.status(200).json({
-            user: profile
+            user
         })
 
     } catch (error) {

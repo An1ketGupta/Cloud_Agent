@@ -27,7 +27,7 @@ export async function refreshAuthAccessToken(req,res){
         setAccessCookie(res, createAccessToken(user));
         return res.status(200).json({ message: "Session refreshed." });
 
-    } catch (error) {
+    } catch {
         clearAuthCookies(res);
         return res.status(401).json({ error: "Session expired." });
     }
