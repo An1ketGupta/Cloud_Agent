@@ -1,7 +1,8 @@
 // Serialize short workspace mutations across API processes, without holding a
 // database transaction open while talking to GitHub or Docker.
 export async function lockConversation(tx, conversationId) {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(7321, ${conversationId}::integer)`;
+    // Cast PostgreSQL's void return type so Prisma can deserialize the result.
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(7321, ${conversationId}::integer)::text AS locked`;
 }
 
 export const PUBLICATION_LEASE_MS = 10 * 60_000;
@@ -20,6 +21,7 @@ export async function assertNoPublication(tx, conversationId) {
     })) {
         const error = new Error("Wait for the pull request to finish publishing.");
         error.status = 409;
+        error.publicMessage = true;
         throw error;
     }
 }

@@ -1,10 +1,11 @@
 import axios from "axios";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { runContainerExec } from "../agent/sandbox/containerIO.js";
 import { GitDiff } from "../agent/tools/gitDiff.js";
+import { githubGitEnvironment } from "./githubGitEnvironment.js";
 
 export function publicationError(message, status = 409) {
-    return Object.assign(new Error(message), { status });
+    return Object.assign(new Error(message), { status, publicMessage: true });
 }
 
 export function validBranch(value) {
@@ -15,6 +16,7 @@ export function validBranch(value) {
 }
 
 export function validatePullRequestInput(input = {}) {
+    if (!input || typeof input !== "object" || Array.isArray(input)) throw publicationError("Enter the pull request details.", 400);
     const title = typeof input.title === "string" ? input.title.trim() : "";
     const body = typeof input.body === "string" ? input.body : "";
     const base = typeof input.base === "string" ? input.base.trim() : "";
@@ -45,8 +47,8 @@ export function githubClient(repository, http = axios) {
 }
 
 export function safePublicationError(error) {
-    if (error.status) return error;
-    const status = error.response?.status;
+    if (error.publicMessage === true) return error;
+    const status = error.response?.status || error.status;
     if (status === 401) return publicationError("GitHub access expired. Reconnect your GitHub account.", 403);
     if (status === 403) return publicationError("GitHub denied this request. Check repository write permissions, app access, or rate limits.", 403);
     if (status === 404) return publicationError("The repository or target branch is unavailable to your GitHub account.", 404);
@@ -69,9 +71,17 @@ export async function publishTaskPullRequest({ container, repository, details, p
     github = githubClient(repository), execute = runContainerExec, readDiff = GitDiff }) {
     const { branch, base, title, body, draft } = details;
     const remote = `https://github.com/${repository.fullName}.git`;
-    const authEnv = ["GIT_TERMINAL_PROMPT=0", "GIT_CONFIG_COUNT=1",
-        "GIT_CONFIG_KEY_0=http.https://github.com/.extraheader",
-        `GIT_CONFIG_VALUE_0=AUTHORIZATION: bearer ${repository.githubAccount.githubAccessToken}`];
+    const authEnv = githubGitEnvironment(repository.githubAccount.githubAccessToken);
+    const readPatch = async () => {
+        // GitDiff includes untracked files in the index as intent-to-add.
+        const diff = await readDiff(container);
+        if (diff.truncated) throw publicationError("The current patch is too large to publish safely.");
+        const patch = await execute(container, ["git", "-c", "core.quotePath=false", "diff", "--binary", "--no-ext-diff", "--no-textconv", "HEAD", "--", "."]);
+        if (patch.exitCode !== 0) throw publicationError("Could not read the current task changes.");
+        if (!patch.stdout.trim()) throw publicationError("There are no remaining changes to publish.");
+        if (Buffer.byteLength(patch.stdout) > 10_000_000) throw publicationError("The current patch is too large to publish safely.");
+        return { patch: patch.stdout, patchHash: createHash("sha256").update(patch.stdout).digest("hex") };
+    };
     const metadata = await github.get("");
     if (metadata.archived || metadata.permissions?.push === false) throw publicationError("You need write access to an active repository to publish this task.", 403);
 
@@ -81,19 +91,15 @@ export async function publishTaskPullRequest({ container, repository, details, p
         if (!headSha || existing.object?.sha !== headSha) throw publicationError("That task branch already exists. Choose a new branch name; existing branches are never overwritten.");
         const prs = await github.get("/pulls", { state: "all", head: `${repository.fullName.split("/")[0]}:${branch}`, base, per_page: 100 });
         if (prs.length) return publicPullRequest(prs[0], branch, base, headSha);
+        const { patchHash } = await readPatch();
+        if (previous.patchHash !== patchHash) throw publicationError("The workspace changed after the task branch was pushed. Choose a new task branch to publish the current changes.");
     } else {
-        // GitDiff includes untracked files in the index as intent-to-add.
-        const diff = await readDiff(container);
-        if (diff.truncated) throw publicationError("The current patch is too large to publish safely.");
+        const { patch, patchHash } = await readPatch();
         const run = async (args, options = {}, message = "Could not prepare the task commit.") => {
             const result = await execute(container, args, options);
             if (result.exitCode !== 0) throw publicationError(message);
             return result.stdout.trim();
         };
-        const patch = await execute(container, ["git", "-c", "core.quotePath=false", "diff", "--binary", "--no-ext-diff", "--no-textconv", "HEAD", "--", "."]);
-        if (patch.exitCode !== 0) throw publicationError("Could not read the current task changes.");
-        if (!patch.stdout.trim()) throw publicationError("There are no remaining changes to publish.");
-        if (Buffer.byteLength(patch.stdout) > 10_000_000) throw publicationError("The current patch is too large to publish safely.");
         const target = await github.get(`/git/ref/heads/${encodeURIComponent(base)}`);
         const baseSha = target.object.sha;
         await run(["git", "fetch", "--no-tags", remote, `refs/heads/${base}`], { env: authEnv, timeoutMs: 180_000 }, "Could not fetch the target branch. Check your GitHub access and retry.");
@@ -101,7 +107,7 @@ export async function publishTaskPullRequest({ container, repository, details, p
         const indexEnv = [`GIT_INDEX_FILE=${indexPath}`];
         try {
             await run(["git", "read-tree", baseSha], { env: indexEnv });
-            await run(["git", "apply", "--cached", "--whitespace=nowarn", "-"], { env: indexEnv, input: patch.stdout }, "The task changes conflict with the target branch. Update the task or choose its original target branch.");
+            await run(["git", "apply", "--cached", "--whitespace=nowarn", "-"], { env: indexEnv, input: patch }, "The task changes conflict with the target branch. Update the task or choose its original target branch.");
             const tree = await run(["git", "write-tree"], { env: indexEnv });
             const originalTree = await run(["git", "rev-parse", `${baseSha}^{tree}`]);
             if (tree === originalTree) throw publicationError("These changes are already on the target branch.");
@@ -110,7 +116,7 @@ export async function publishTaskPullRequest({ container, repository, details, p
             headSha = await run(["git", "-c", `user.name=${username}`, "-c", `user.email=${userId}+${username}@users.noreply.github.com`, "commit-tree", tree, "-p", baseSha], { input: `${title}\n` });
             // Persist before pushing, so a network timeout or process restart can
             // safely recover this exact branch instead of publishing twice.
-            await onPrepared({ branch, base, headSha });
+            await onPrepared({ branch, base, headSha, patchHash });
             await run(["git", "push", `--force-with-lease=refs/heads/${branch}:`, remote, `${headSha}:refs/heads/${branch}`], { env: authEnv, timeoutMs: 180_000 }, "Could not publish the task branch. Check GitHub write access or choose an unused branch name, then retry.");
         } finally {
             await execute(container, ["node", "-e", "const fs=require('node:fs'); for(const p of process.argv.slice(1)) fs.rmSync(p,{force:true});", indexPath, `${indexPath}.lock`]).catch(() => {});

@@ -79,7 +79,7 @@ export function createPullRequestHandlers({ db, getContainer, makeGithub = githu
                     }
                     const previous = current.pullRequest;
                     current.pullRequest = { ...details, status: "creating", startedAt: new Date().toISOString(), requestId: randomUUID(),
-                        ...(previous?.branch === details.branch && previous?.base === details.base ? { headSha: previous.headSha } : {}) };
+                        ...(previous?.branch === details.branch && previous?.base === details.base ? { headSha: previous.headSha, patchHash: previous.patchHash } : {}) };
                     const response = JSON.stringify(current);
                     const saved = await tx.query.updateMany({ where: { id: query.id, response: query.response }, data: { response } });
                     if (!saved.count) throw publicationError("The task changed. Refresh and try again.");

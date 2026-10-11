@@ -5,6 +5,7 @@ import { GitDiff } from "../agent/tools/gitDiff.js";
 import { runContainerExec } from "../agent/sandbox/containerIO.js";
 import { restoreFileBeforeRun, splitFilePatches } from "../services/fileReview.js";
 import { reconcileFailedConversationRuns } from "../services/reconcileFailedConversationRuns.js";
+import { assertNoPublication, lockConversation, publicationActive } from "../services/conversationPublication.js";
 
 const repositorySelect = { id: true, fullName: true, htmlUrl: true };
 
@@ -55,6 +56,17 @@ export async function getConversation(req, res) {
     });
     if (!conversation) return res.status(404).json({ error: "Conversation not found." });
     await reconcileFailedConversationRuns(conversation);
+    for (const task of conversation.tasks) {
+        for (const query of task.conversation) {
+            try {
+                const result = JSON.parse(query.response);
+                if (result?.pullRequest?.status === "creating" && !publicationActive(result.pullRequest)) {
+                    result.pullRequest.status = "failed";
+                    query.response = JSON.stringify(result);
+                }
+            } catch { /* Older task responses may not contain JSON. */ }
+        }
+    }
     const activeTasks = conversation.tasks.filter((task) => task.status === "pending" || task.status === "runnning");
     const execution = {};
     await Promise.all(activeTasks.map(async (task) => {
@@ -87,6 +99,8 @@ export async function sendMessage(req, res) {
 
     try {
         const created = await prisma.$transaction(async (tx) => {
+            await lockConversation(tx, id);
+            await assertNoPublication(tx, id);
             const pending = await tx.message.findFirst({ where: { conversationId: id, role: "assistant", status: "pending" } });
             if (pending) return null;
             const priorMessages = await tx.message.count({ where: { conversationId: id } });
@@ -128,6 +142,7 @@ export async function sendMessage(req, res) {
         }
         return res.status(201).json(created);
     } catch (error) {
+        if (error.status === 409) return res.status(409).json({ error: error.message });
         if (error.code === "P2002") return res.status(409).json({ error: "Wait for the current response before sending another message." });
         console.error("Could not send conversation message:", error);
         return res.status(500).json({ error: "Could not send message." });
@@ -152,6 +167,7 @@ export async function reviewFile(req, res) {
     if (!Object.hasOwn(result?.fileReview?.files || {}, path)) {
         return res.status(404).json({ error: "This file has no reviewable changes in this run." });
     }
+    if (result.pullRequest?.status === "created") return res.status(409).json({ error: "These changes have already been published in a pull request." });
     if (result.fileReview.files[path] !== "pending") {
         return res.status(409).json({ error: "This file has already been reviewed." });
     }
@@ -160,7 +176,19 @@ export async function reviewFile(req, res) {
 
     const previousResponse = query.response;
     result.fileReview.files[path] = "processing";
-    const claimed = await prisma.query.updateMany({ where: { id: query.id, response: previousResponse }, data: { response: JSON.stringify(result) } });
+    let claimed;
+    try {
+        claimed = await prisma.$transaction(async (tx) => {
+            await lockConversation(tx, id);
+            await assertNoPublication(tx, id);
+            const running = await tx.message.findFirst({ where: { conversationId: id, role: "assistant", status: "pending" } });
+            if (running) throw Object.assign(new Error("Wait for the current agent run to finish."), { status: 409 });
+            return tx.query.updateMany({ where: { id: query.id, response: previousResponse }, data: { response: JSON.stringify(result) } });
+        });
+    } catch (error) {
+        if (error.status === 409) return res.status(409).json({ error: error.message });
+        throw error;
+    }
     if (!claimed.count) return res.status(409).json({ error: "The file review changed. Refresh and try again." });
     const claimedResponse = JSON.stringify(result);
     let modifiedContainer;

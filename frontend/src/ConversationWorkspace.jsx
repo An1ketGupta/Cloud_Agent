@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { authApi } from './api/authApi';
 import { conversationApi } from './api/conversationApi';
 import GitDiffViewer from './GitDiffViewer';
+import CreatePullRequestDialog from './CreatePullRequestDialog';
 import { 
   Plus, 
   Home, 
@@ -22,10 +23,12 @@ import {
   Terminal,
   ShieldAlert,
   Bug,
-  TestTube2
+  TestTube2,
+  GitPullRequest,
+  ExternalLink
 } from 'lucide-react';
 
-function RunDetails({ task, execution, onFileDecision, reviewingFile }) {
+function RunDetails({ task, execution, onFileDecision, reviewingFile, onCreatePullRequest, canPublish, publicationBusy }) {
   let result;
   try {
     result = JSON.parse(task.conversation?.[0]?.response || 'null');
@@ -51,6 +54,16 @@ function RunDetails({ task, execution, onFileDecision, reviewingFile }) {
           </span>
         </div>
       </div>
+
+      {result?.pullRequest?.status === 'created' ? (
+        <a href={result.pullRequest.url} target="_blank" rel="noopener noreferrer" className="linear-btn-secondary inline-flex items-center gap-2 mb-3 text-xs">
+          <GitPullRequest className="w-3.5 h-3.5 text-emerald-400" /> View PR #{result.pullRequest.number} on GitHub <ExternalLink className="w-3 h-3" />
+        </a>
+      ) : task.status === 'completed' && (result?.patch || result?.fileReview?.displayPatch) && canPublish && (
+        <button type="button" onClick={() => onCreatePullRequest(task.id)} disabled={publicationBusy || !!reviewingFile} className="linear-btn-primary mb-3 text-xs">
+          <GitPullRequest className="w-3.5 h-3.5" /> {publicationBusy ? 'Publishing PR...' : 'Create PR'}
+        </button>
+      )}
 
       {active && (
         <div className="p-3.5 rounded-xl bg-[#0c0d10] border border-white/[0.07] text-xs text-[#a1a1aa] space-y-2">
@@ -93,9 +106,9 @@ function RunDetails({ task, execution, onFileDecision, reviewingFile }) {
       {(result?.patch || result?.fileReview?.displayPatch) && (
         <GitDiffViewer
           patch={result.fileReview?.displayPatch || result.patch}
-          fileReview={result.fileReview}
-          onFileDecision={(path, decision) => onFileDecision(task.id, path, decision)}
-          reviewingFile={reviewingFile}
+          fileReview={result?.pullRequest?.status === 'created' ? undefined : result.fileReview}
+          onFileDecision={result?.pullRequest?.status === 'created' ? undefined : (path, decision) => onFileDecision(task.id, path, decision)}
+          reviewingFile={publicationBusy ? 'publishing' : reviewingFile}
         />
       )}
 
@@ -257,6 +270,8 @@ export default function ConversationWorkspace({
   const [busy, setBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
+  const [pullRequestTask, setPullRequestTask] = useState(null);
+  const [publishing, setPublishing] = useState(false);
 
   const repositories = user.githubAccount?.repositories || [];
   const conversation = data?.conversation;
@@ -369,7 +384,7 @@ export default function ConversationWorkspace({
 
   async function send(sendMode) {
     const content = prompt.trim();
-    if (!content || busy || (view === 'conversation' && pending)) return;
+    if (!content || busy || publishing || (view === 'conversation' && pending)) return;
     setBusy(true);
     setError('');
     try {
@@ -404,6 +419,13 @@ export default function ConversationWorkspace({
   }
 
   const tasks = new Map(conversation?.tasks?.map((task) => [task.id, task]) || []);
+  const latestTaskId = Math.max(0, ...(conversation?.tasks || []).map((task) => task.id));
+  const publicationBusy = publishing || (conversation?.tasks || []).some((task) => {
+    try {
+      const pr = JSON.parse(task.conversation?.[0]?.response || 'null')?.pullRequest;
+      return pr?.status === 'creating';
+    } catch { return false; }
+  });
 
   // Project-relevant starter workflows matching the design system cards
   const taskTemplates = [
@@ -443,6 +465,26 @@ export default function ConversationWorkspace({
 
   return (
     <div className="min-h-screen bg-[#08090a] text-[#f7f8f8] flex flex-col md:flex-row antialiased selection:bg-[#5e6ad2]/30 selection:text-white">
+      {pullRequestTask && (
+        <CreatePullRequestDialog
+          conversationId={pullRequestTask.conversationId}
+          taskId={pullRequestTask.taskId}
+          onClose={() => setPullRequestTask(null)}
+          onBusyChange={setPublishing}
+          onCreated={(pullRequest) => {
+            const id = pullRequestTask.conversationId;
+            const taskId = pullRequestTask.taskId;
+            setPullRequestTask(null);
+            setData((current) => current?.conversation?.id !== id ? current : {
+              ...current, conversation: { ...current.conversation, tasks: current.conversation.tasks.map((task) => {
+                if (task.id !== taskId) return task;
+                const query = task.conversation[0];
+                return { ...task, conversation: [{ ...query, response: JSON.stringify({ ...JSON.parse(query.response), pullRequest }) }, ...task.conversation.slice(1)] };
+              }) }
+            });
+          }}
+        />
+      )}
       {/* Mobile Top Bar */}
       <div className="md:hidden flex items-center justify-between p-4 border-b border-white/[0.08] bg-[#0c0d10] sticky top-0 z-40">
         <div className="flex items-center gap-2">
@@ -881,6 +923,9 @@ export default function ConversationWorkspace({
                             execution={data.execution?.[message.taskId]}
                             onFileDecision={reviewFile}
                             reviewingFile={reviewingFile}
+                            onCreatePullRequest={(taskId) => setPullRequestTask({ conversationId: activeId, taskId })}
+                            canPublish={message.taskId === latestTaskId && !pending}
+                            publicationBusy={publicationBusy}
                           />
                         )}
                     </article>
@@ -896,7 +941,7 @@ export default function ConversationWorkspace({
                 onChange={setPrompt}
                 onSend={send}
                 busy={busy}
-                disabled={pending || !conversation}
+                disabled={pending || publicationBusy || !conversation}
                 mode={mode}
                 onModeChange={setMode}
               />

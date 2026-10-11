@@ -9,7 +9,7 @@ import './workers/taskWorker.js';
 import { startIdleConversationCleanup } from './services/idleConversationContainers.js';
 
 const app = express();
-app.use(express.json())
+app.use(express.json({ limit: "512kb" }))
 app.use(cookieParser())
 
 app.use('/auth', authRouter)
