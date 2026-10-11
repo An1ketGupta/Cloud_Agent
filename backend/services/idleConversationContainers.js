@@ -2,7 +2,7 @@ import { prisma } from "../clients/prismaClient.js";
 import { dockerClient } from "../clients/dockerClient.js";
 import { taskQueue } from "../queues/taskQueue.js";
 
-const IDLE_MS = 3 * 60_000;
+const IDLE_MS = 15 * 60_000;
 
 export async function removeIdleConversationContainers({ db = prisma, docker = dockerClient, queue = taskQueue, now = new Date() } = {}) {
     const cutoff = new Date(now.getTime() - IDLE_MS);

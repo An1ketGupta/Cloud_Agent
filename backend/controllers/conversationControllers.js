@@ -4,6 +4,7 @@ import { getConversationContainer } from "../services/conversationContainer.js";
 import { GitDiff } from "../agent/tools/gitDiff.js";
 import { runContainerExec } from "../agent/sandbox/containerIO.js";
 import { restoreFileBeforeRun, splitFilePatches } from "../services/fileReview.js";
+import { reconcileFailedConversationRuns } from "../services/reconcileFailedConversationRuns.js";
 
 const repositorySelect = { id: true, fullName: true, htmlUrl: true };
 
@@ -53,6 +54,7 @@ export async function getConversation(req, res) {
         }
     });
     if (!conversation) return res.status(404).json({ error: "Conversation not found." });
+    await reconcileFailedConversationRuns(conversation);
     const activeTasks = conversation.tasks.filter((task) => task.status === "pending" || task.status === "runnning");
     const execution = {};
     await Promise.all(activeTasks.map(async (task) => {
