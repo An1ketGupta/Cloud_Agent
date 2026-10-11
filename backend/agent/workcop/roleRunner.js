@@ -2,6 +2,7 @@ import { geminiClient } from "../../clients/geminiClient.js";
 import { toolDeclarations, FILE_DISCOVERY_INSTRUCTIONS, FILE_OPERATION_INSTRUCTIONS } from "../tools/toolDeclarations.js";
 import { executeFunction } from "../sandbox/executeFunction.js";
 import { createDiscoveryGuard } from "./discoveryGuard.js";
+import { FILE_MUTATION_TOOLS } from "../tools/fileMutation.js";
 
 const MODEL = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
 const MAX_STEPS = 60;
@@ -29,9 +30,9 @@ async function createInteraction(params, client, signal) {
 }
 
 export async function runRole({ name, systemPrompt, input, allowedTools, outputSchema, container,
-    client = geminiClient, toolExecutor = executeFunction, onProgress = async () => {} }) {
-    const guard = createDiscoveryGuard({ container, allowedTools, toolExecutor, repositoryInventory: input?.repositoryInventory });
-    const prompt = () => `${systemPrompt}\n\n${FILE_DISCOVERY_INSTRUCTIONS}${allowedTools.includes("ApplyPatch") ? `\n\n${FILE_OPERATION_INSTRUCTIONS}` : ""}${guard.disabled
+    client = geminiClient, toolExecutor = executeFunction, onProgress = async () => {}, fileOperationBudget }) {
+    const guard = createDiscoveryGuard({ container, allowedTools, toolExecutor, repositoryInventory: input?.repositoryInventory, fileOperationBudget });
+    const prompt = () => `${systemPrompt}\n\n${FILE_DISCOVERY_INSTRUCTIONS}${allowedTools.some((name) => FILE_MUTATION_TOOLS.includes(name)) ? `\n\n${FILE_OPERATION_INSTRUCTIONS}` : ""}${guard.disabled
         ? `\n${guard.disabledReason} Do not call getFileNameList or SearchFile.` : ""}`;
     const toolConfig = () => {
         const tools = toolDeclarations.filter((tool) => guard.availableTools.includes(tool.name));
@@ -73,7 +74,8 @@ export async function runRole({ name, systemPrompt, input, allowedTools, outputS
             const discovery = call.name === "getFileNameList" || call.name === "SearchFile";
             const detail = discovery || call.name === "ReadFile" ? ` ${JSON.stringify(call.arguments ?? {}).slice(0, 500)}`
                 : call.name === "ApplyPatch" && Array.isArray(call.arguments?.operations)
-                    ? ` ${JSON.stringify(call.arguments.operations.map((operation) => ({ type: operation?.type, path: operation?.path }))).slice(0, 500)}` : "";
+                    ? ` ${JSON.stringify(call.arguments.operations.map((operation) => ({ type: operation?.type, path: operation?.path }))).slice(0, 500)}`
+                    : FILE_MUTATION_TOOLS.includes(call.name) ? ` ${JSON.stringify({ path: call.arguments?.path })}` : "";
             await onProgress(`${name}: ${call.name}${detail} started.`);
             const wasDisabled = guard.disabled;
             let response;
@@ -85,6 +87,13 @@ export async function runRole({ name, systemPrompt, input, allowedTools, outputS
             const counts = response.value?.totalMatches !== undefined
                 ? ` (${response.value.returnedCount}/${response.value.totalMatches} files; nextOffset=${response.value.nextOffset})` : "";
             await onProgress(`${name}: ${call.name} ${response.isError ? `failed${response.value.code ? ` [${response.value.code}]` : ""}: ${response.value.error}` : "finished."}${counts}${response.cached ? " Reused cached result." : ""}`);
+            if (response.isError && FILE_MUTATION_TOOLS.includes(call.name)) {
+                const { path, editIndex, failedEdit, failuresRemaining, totalFailuresRemaining, recovery } = response.value;
+                await onProgress(`${name}: Edit diagnostics ${JSON.stringify({ path, editIndex, failedEdit, failuresRemaining, totalFailuresRemaining,
+                    recoveryStatus: recovery?.status, currentRevision: recovery?.file?.revision })}`);
+            }
+            const fallbacks = response.value?.matches?.filter((match) => match.strategy !== "exact");
+            if (fallbacks?.length) await onProgress(`${name}: Whitespace matching ${JSON.stringify(fallbacks)}`);
             if (!wasDisabled && guard.disabled) await onProgress(`${name}: File discovery disabled after repeated calls or the discovery budget; continuing with other tools.`);
             results.push({
                 type: "function_result",

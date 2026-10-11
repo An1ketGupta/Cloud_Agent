@@ -1,16 +1,50 @@
-export const FILE_OPERATION_INSTRUCTIONS = `ApplyPatch accepts structured JSON operations, never diff text or patch delimiters.
+export const FILE_OPERATION_INSTRUCTIONS = `Use CreateFile, EditFile, and DeleteFile for ordinary changes, one file per call. All editors accept JSON, never diff text or patch delimiters.
 Read each existing file first with ReadFile; copy its revision unchanged into update/delete operations. ReadFile returns a full-file SHA-256 revision even for a page. If truncated, use nextOffset to read more; never reconstruct a file from a truncated page.
-Batch related files in one call: ApplyPatch({"operations":[{"type":"update","path":"script.js","revision":"<revision from ReadFile>","edits":[{"before":"const loading = false;","after":"let loading = false;"}]},{"type":"create","path":"utils.js","content":"export const enabled = true;\\n"}]}).
+EditFile({"path":"script.js","revision":"<revision from ReadFile>","edits":[{"before":"const loading = false;","after":"let loading = false;"}]}).
+CreateFile({"path":"utils.js","content":"export const enabled = true;\\n"}). DeleteFile({"path":"old.js","revision":"<revision from ReadFile>"}). Do not include type in these single-file tools.
+Reserve ApplyPatch for changes that must succeed together atomically: ApplyPatch({"operations":[{"type":"update","path":"script.js","revision":"<revision from ReadFile>","edits":[{"before":"const loading = false;","after":"let loading = false;"}]},{"type":"create","path":"utils.js","content":"export const enabled = true;\\n"}]}).
 create requires type, path, content; empty files are allowed. update requires type, path, revision, edits. delete requires type, path, revision.
 All paths must be repository-relative with / separators. Supply one operation per file. Every before string must be nonempty, copied from the original file, and unique; include surrounding code to disambiguate or insert text. Edits within a file match the same original snapshot and cannot overlap. Use after:"" to remove a block. Do not include line numbers or diff +/- prefixes.
-Existing line endings are preserved. Batch JSON is limited to 250,000 UTF-8 bytes, 50 operations, and 100 edits per update; each file is limited to 1,000,000 bytes.
-Failures include code, path, operationIndex, editIndex when applicable, and recovery instructions. After STALE_REVISION, TEXT_NOT_FOUND, AMBIGUOUS_MATCH, or REPLAY_CONFLICT, read the affected file before submitting a corrected batch. Do not repeat an unchanged failed request. Repeating an already successful batch returns replayed:true if the files still match its result. For a new intentional batch with identical operations after a replay conflict, supply a fresh optional requestId; reuse it unchanged for retries of that batch.
+Exact matching is preferred. Unique full-line matches may tolerate trailing spaces or a consistent indentation offset; internal code and string contents are never approximately replaced. Existing line endings are preserved. Batch JSON is limited to 250,000 UTF-8 bytes, 50 operations, and 100 edits per update; each file is limited to 1,000,000 bytes.
+Failures include code, path, editIndex, bounded failedEdit snippets, and candidate code when available. Candidates are suggestions and are never applied automatically. Content conflicts automatically trigger a reread: when recovery.status is read, use recovery.file.output and its revision to correct your edit; no separate ReadFile is needed unless the required text is outside that page. If the reread failed, read the file before retrying. Never repeat an unchanged failed request.
+A failed atomic batch applies nothing: correct the failing edit and resubmit all still-needed operations. Do not resend successful earlier calls. Successful writes return current revisions and matching strategies. Repeating an already successful request returns replayed:true if the files still match its result. For a new intentional request with identical operations after a replay conflict, supply a fresh optional requestId; reuse it unchanged for retries of that request.
+Four consecutive failed attempts on the same file exhaust its budget; success on that file resets this count. Successful reads do not reset it. A separate task-wide failure limit prevents endless retries. Recovery-only guard rejections do not consume write attempts.
 Review GitDiff before completing the assignment. Stop and report the error if the file operation failure budget is exhausted or recovery is required.`;
 
 const pagination = {
     limit: { type: "integer", minimum: 1, maximum: 500, description: "Maximum files in this page (1-500)." },
     offset: { type: "integer", minimum: 0, description: "Start at 0; use the previous result's nextOffset for another page." }
 };
+
+const mutationPath = { type: "string", description: "Repository-relative file path with / separators." };
+const mutationRevision = { type: "string", description: "Full SHA-256 revision copied unchanged from ReadFile or a successful edit." };
+const requestId = { type: "string", maxLength: 128, description: "Optional identifier for an intentional new request. Reuse unchanged for retries." };
+const mutationEdits = {
+    type: "array", minItems: 1, maxItems: 100,
+    description: "Small nonoverlapping replacements matching the same original file. Include surrounding code for insertions and repeated blocks.",
+    items: {
+        type: "object",
+        properties: {
+            before: { type: "string", minLength: 1, description: "Nonempty unique original code, copied from the current file." },
+            after: { type: "string", description: "Replacement code. Empty string removes the matched block." }
+        },
+        required: ["before", "after"], additionalProperties: false
+    }
+};
+
+const singleFileTools = [
+    { name: "CreateFile", description: "Creates one new UTF-8 file; cannot overwrite an existing file.",
+        properties: { path: mutationPath, content: { type: "string", description: "Complete new file content; empty files are allowed." }, requestId },
+        required: ["path", "content"] },
+    { name: "EditFile", description: "Edits one existing file using its current revision and small before/after replacements. Unique whitespace-tolerant matching and automatic conflict rereads are supported.",
+        properties: { path: mutationPath, revision: mutationRevision, edits: mutationEdits, requestId },
+        required: ["path", "revision", "edits"] },
+    { name: "DeleteFile", description: "Deletes one existing file only if its revision still matches.",
+        properties: { path: mutationPath, revision: mutationRevision, requestId }, required: ["path", "revision"] }
+].map(({ name, description, properties, required }) => ({
+    type: "function", name, description,
+    parameters: { type: "object", properties, required, additionalProperties: false }
+}));
 
 export const FILE_DISCOVERY_INSTRUCTIONS = `Repository file tools accept JSON objects, not shell commands.
 The repository root is /workspace/repository; prefer repository-relative paths. Never guess a layout such as backend/src.
@@ -23,7 +57,7 @@ Search within an observed directory: SearchFile({"query":"*.jsx","directory":"fr
 Results contain repository-relative files, directories, totalMatches, nextOffset, and truncated. Read returned paths with ReadFile({"filePath":"src/index.js"}).
 Entries in files are file paths, even if their names are frontend or backend without extensions. Only directories contains directory paths. An empty directories array means no child directories were discovered. A complete three-file listing will not reveal extra files if searched again.
 If nextOffset is not null, change offset to that value to get another page. If there are no matches, change the query or directory. If a directory is missing, use availableDirectories from the error.
-Do not repeat identical discovery calls: results are cached until ApplyPatch, and repeated calls or excessive discovery disable these tools for the rest of this role. Once you locate relevant files, read them and complete your assignment.`;
+Do not repeat identical discovery calls: results are cached until a file mutation, and repeated calls or excessive discovery disable these tools for the rest of this role. Once you locate relevant files, read them and complete your assignment.`;
 
 export const toolDeclarations = [
     {
@@ -85,11 +119,12 @@ export const toolDeclarations = [
             additionalProperties: false
         }
     },
+    ...singleFileTools,
     {
         type: "function",
         name: "ApplyPatch",
         description:
-            "Applies a validated batch of structured create/update/delete file operations. Read existing files first and copy their revisions. Exact before/after replacements must match uniquely. Diff text is unsupported. Identical successful requests are replay-safe.",
+            "Applies an atomic batch of create/update/delete operations when related files must succeed together. Prefer CreateFile/EditFile/DeleteFile for ordinary changes. Read existing files first and copy their revisions. Failed batches apply nothing. Diff text is unsupported.",
         parameters: {
             type: "object",
             properties: {

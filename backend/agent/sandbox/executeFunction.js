@@ -5,6 +5,7 @@ import { SearchFile } from "../tools/searchFile.js";
 import { SearchContent } from "../tools/searchContent.js";
 import { GitDiff } from "../tools/gitDiff.js";
 import { validateOperations, FileOperationError } from "../tools/fileOperationsRuntime.js";
+import { FILE_MUTATION_TOOLS, fileMutationInput } from "../tools/fileMutation.js";
 import { z } from "zod";
 import { discoverySchemas } from "../tools/fileDiscovery.js";
 
@@ -18,6 +19,9 @@ const schemas = {
     ...discoverySchemas,
     ReadFile: pathArgs,
     ApplyPatch: z.unknown(),
+    CreateFile: z.unknown(),
+    EditFile: z.unknown(),
+    DeleteFile: z.unknown(),
     SearchContent: z.object({
         query: z.string().min(1)
     }).strict(),
@@ -48,7 +52,10 @@ export async function executeFunction(functionCall, container, allowedTools = []
     let args;
     try {
         args = schema.parse(functionCall.arguments);
-        if (functionName === "ApplyPatch") validateOperations(args);
+        if (FILE_MUTATION_TOOLS.includes(functionName)) {
+            args = fileMutationInput(functionName, args);
+            validateOperations(args);
+        }
     } catch (error) {
         if (error instanceof FileOperationError) throw error;
         throw new FileOperationError("INVALID_ARGUMENTS", error.message);
@@ -59,6 +66,9 @@ export async function executeFunction(functionCall, container, allowedTools = []
         SearchFile: () => SearchFile(container, args),
         ReadFile: () => ReadFile(container, args.filePath, args),
         ApplyPatch: () => ApplyPatch(container, args),
+        CreateFile: () => ApplyPatch(container, args),
+        EditFile: () => ApplyPatch(container, args),
+        DeleteFile: () => ApplyPatch(container, args),
         SearchContent: () => SearchContent(container, args.query),
         GitDiff: () => GitDiff(container)
     };

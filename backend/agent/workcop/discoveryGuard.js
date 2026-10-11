@@ -1,5 +1,6 @@
 import { parseDiscoveryArguments } from "../tools/fileDiscovery.js";
 import { createFileOperationGuard } from "./fileOperationGuard.js";
+import { FILE_MUTATION_TOOLS } from "../tools/fileMutation.js";
 
 const DISCOVERY_TOOLS = new Set(["getFileNameList", "SearchFile"]);
 const MAX_DISCOVERY_CALLS = 8;
@@ -15,8 +16,8 @@ function stableKey(value) {
     return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableKey(value[key])}`).join(",")}}`;
 }
 
-export function createDiscoveryGuard({ container, allowedTools, toolExecutor, repositoryInventory }) {
-    const fileOperations = createFileOperationGuard({ container, allowedTools, toolExecutor });
+export function createDiscoveryGuard({ container, allowedTools, toolExecutor, repositoryInventory, fileOperationBudget }) {
+    const fileOperations = createFileOperationGuard({ container, allowedTools, toolExecutor, budget: fileOperationBudget });
     const cache = new Map();
     let discoveryCalls = 0;
     let repeats = 0;
@@ -64,7 +65,7 @@ export function createDiscoveryGuard({ container, allowedTools, toolExecutor, re
                 }
             }
             // Even a failed patch may have changed files; never reuse pre-patch results.
-            if (call.name === "ApplyPatch" && allowedTools.includes(call.name)) {
+            if (FILE_MUTATION_TOOLS.includes(call.name) && allowedTools.includes(call.name)) {
                 cache.clear();
                 repeats = 0;
             }

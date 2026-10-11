@@ -129,7 +129,11 @@ function whitespaceMatches(lines, before, after, strategy) {
     const trailing = (line) => line.replace(/[ \t]+$/, "");
     const patternIndent = commonIndent(pattern);
     const matches = [];
+    const anchor = pattern.findIndex((line) => /\S/.test(line));
     for (let index = 0; index <= lines.length - pattern.length; index++) {
+        const anchorText = lines[index + anchor].text;
+        if (strategy === "trailing-whitespace" && trailing(anchorText) !== trailing(pattern[anchor])) continue;
+        if (strategy === "indentation" && trailing(anchorText).replace(/^[ \t]+/, "") !== trailing(pattern[anchor]).replace(/^[ \t]+/, "")) continue;
         const window = lines.slice(index, index + pattern.length);
         const sourceIndent = strategy === "indentation" ? commonIndent(window.map((line) => line.text)) : "";
         const matchesLine = (line, position) => {
@@ -199,7 +203,8 @@ export function replaceText(text, edits, details = {}, onMatch = () => {}) {
         if (!before.length) fail("INVALID_EDIT", "before must be nonempty; include surrounding code for insertions.", { ...details, editIndex });
         const failureDetails = () => ({ ...details, editIndex, recovery: "ReadFile", applied: false,
             failedEdit: { before: boundedText(edit.before), after: boundedText(edit.after) },
-            candidates: similarCode(lines, before), attemptedStrategies: ["exact", "trailing-whitespace", "indentation"] });
+            candidates: similarCode(lines, before).map((candidate) => ({ ...candidate, offset: offsets[candidate.offset] })),
+            attemptedStrategies: ["exact", "trailing-whitespace", "indentation"] });
         let start = normalized.indexOf(before);
         let match;
         if (start >= 0) {

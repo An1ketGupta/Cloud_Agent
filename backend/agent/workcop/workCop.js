@@ -3,6 +3,8 @@ import { runRole } from "./roleRunner.js";
 import { GitDiff } from "../tools/gitDiff.js";
 import { normalizeRepositoryPath } from "../tools/repositoryPath.js";
 import { getFileNameList } from "../tools/getFiles.js";
+import { FILE_MUTATION_TOOLS } from "../tools/fileMutation.js";
+import { createFileOperationBudget } from "./fileOperationGuard.js";
 
 const filePath = z.string().min(1);
 
@@ -56,7 +58,7 @@ const READ_TOOLS = [
 
 const DEVELOPER_TOOLS = [
     ...READ_TOOLS,
-    "ApplyPatch",
+    ...FILE_MUTATION_TOOLS,
     "GitDiff"
 ];
 
@@ -142,6 +144,7 @@ export async function getValidatedPlan(role, options) {
 
 export async function runWorkCop({ container, request, onProgress = async () => {}, onAgentResult = async () => {}, roleRunner = runRole,
     inventoryReader = getFileNameList, diffReader = GitDiff }) {
+    const fileOperationBudget = createFileOperationBudget();
     await onProgress("Reading the repository file inventory.");
     let repositoryInventory = await inventoryReader(container, { filePath: ".", limit: 500, offset: 0 });
     await onProgress(`Repository inventory: ${repositoryInventory.returnedCount}/${repositoryInventory.totalMatches} files; directories=${JSON.stringify(repositoryInventory.directories)}; files=${JSON.stringify(repositoryInventory.files.slice(0, 30))}.`);
@@ -152,8 +155,8 @@ export async function runWorkCop({ container, request, onProgress = async () => 
             inventoryDirty = false;
         }
         await onProgress(`${options.name} started.`);
-        const result = await roleRunner({ ...options, input: { ...options.input, repositoryInventory }, onProgress });
-        if (options.allowedTools.includes("ApplyPatch")) inventoryDirty = true;
+        const result = await roleRunner({ ...options, input: { ...options.input, repositoryInventory }, onProgress, fileOperationBudget });
+        if (options.allowedTools.some((name) => FILE_MUTATION_TOOLS.includes(name))) inventoryDirty = true;
         await onAgentResult({ agent: options.name, output: result });
         await onProgress(`${options.name} finished.`);
         return result;
@@ -279,8 +282,8 @@ No commands, tests, builds, commits, or pull requests.`,
 
             systemPrompt: `You are WorkCop's ${task.role}.
 Implement your assigned code change in /workspace/repository.
-Read relevant files, locate the correct code, and use ApplyPatch for every change, including new files.
-Use structured create/update/delete operations. For updates/deletes, copy the revision from ReadFile. Batch related edits; after a content conflict read the affected file before correcting the request.
+Read relevant files and use CreateFile, EditFile, or DeleteFile for ordinary changes, one file at a time. Use ApplyPatch only for related changes that must succeed atomically.
+For updates/deletes, copy the revision from ReadFile or the latest successful edit. Keep replacements small. After a conflict, use the automatic recovery reread and candidate code to correct the failed edit; read again only if recovery failed or the target code is outside the returned page.
 You may use only your listed tools.
 Do not run commands or claim that tests/builds ran.
 Review GitDiff before finishing.
@@ -362,8 +365,8 @@ Approve only when the patch appears to satisfy the request.`,
 
             systemPrompt: `You are WorkCop's revision developer for this repository.
 Address every QA finding using your listed repository tools.
-Inspect current files, apply focused patches with ApplyPatch, and review GitDiff.
-Use structured create/update/delete operations with revisions from ReadFile. After a content conflict, read the affected file before submitting corrected edits.
+Inspect current files, use CreateFile/EditFile/DeleteFile for focused single-file changes, and review GitDiff. Reserve ApplyPatch for atomic batches.
+Use revisions from ReadFile or the latest successful edit. After a conflict, correct the edit using the automatic recovery reread and candidate code. Do not repeat successful earlier edits.
 Do not run tests/builds or claim they ran.
 Return only JSON with summary and changedFiles.`,
 
