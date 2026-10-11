@@ -1,3 +1,12 @@
+export const FILE_OPERATION_INSTRUCTIONS = `ApplyPatch accepts structured JSON operations, never diff text or patch delimiters.
+Read each existing file first with ReadFile; copy its revision unchanged into update/delete operations. ReadFile returns a full-file SHA-256 revision even for a page. If truncated, use nextOffset to read more; never reconstruct a file from a truncated page.
+Batch related files in one call: ApplyPatch({"operations":[{"type":"update","path":"script.js","revision":"<revision from ReadFile>","edits":[{"before":"const loading = false;","after":"let loading = false;"}]},{"type":"create","path":"utils.js","content":"export const enabled = true;\\n"}]}).
+create requires type, path, content; empty files are allowed. update requires type, path, revision, edits. delete requires type, path, revision.
+All paths must be repository-relative with / separators. Supply one operation per file. Every before string must be nonempty, copied from the original file, and unique; include surrounding code to disambiguate or insert text. Edits within a file match the same original snapshot and cannot overlap. Use after:"" to remove a block. Do not include line numbers or diff +/- prefixes.
+Existing line endings are preserved. Batch JSON is limited to 250,000 UTF-8 bytes, 50 operations, and 100 edits per update; each file is limited to 1,000,000 bytes.
+Failures include code, path, operationIndex, editIndex when applicable, and recovery instructions. After STALE_REVISION, TEXT_NOT_FOUND, AMBIGUOUS_MATCH, or REPLAY_CONFLICT, read the affected file before submitting a corrected batch. Do not repeat an unchanged failed request. Repeating an already successful batch returns replayed:true if the files still match its result. For a new intentional batch with identical operations after a replay conflict, supply a fresh optional requestId; reuse it unchanged for retries of that batch.
+Review GitDiff before completing the assignment. Stop and report the error if the file operation failure budget is exhausted or recovery is required.`;
+
 const pagination = {
     limit: { type: "integer", minimum: 1, maximum: 500, description: "Maximum files in this page (1-500)." },
     offset: { type: "integer", minimum: 0, description: "Start at 0; use the previous result's nextOffset for another page." }
@@ -61,14 +70,16 @@ export const toolDeclarations = [
         type: "function",
         name: "ReadFile",
         description:
-            "Reads up to 50,000 characters of one repository file without changing it.",
+            "Reads a page of UTF-8 repository text and returns its full-file revision for update/delete operations. Use nextOffset for subsequent pages.",
         parameters: {
             type: "object",
             properties: {
                 filePath: {
                     type: "string",
-                    description: "The path of a file inside /workspace/repository."
-                }
+                    description: "Repository-relative file path, e.g. src/index.js."
+                },
+                offset: { type: "integer", minimum: 0, description: "Character offset; start at 0 and use nextOffset to read another page." },
+                limit: { type: "integer", minimum: 1, maximum: 50000, description: "Page size in characters; defaults to 50000." }
             },
             required: ["filePath"],
             additionalProperties: false
@@ -78,16 +89,39 @@ export const toolDeclarations = [
         type: "function",
         name: "ApplyPatch",
         description:
-            "Applies a patch in /workspace/repository. Read affected files first. Prefer *** Begin Patch with *** Add File, *** Update File and @@ sections, or *** Delete File, followed by *** End Patch. Git unified diffs with repository-relative a/ and b/ paths also work.",
+            "Applies a validated batch of structured create/update/delete file operations. Read existing files first and copy their revisions. Exact before/after replacements must match uniquely. Diff text is unsupported. Identical successful requests are replay-safe.",
         parameters: {
             type: "object",
             properties: {
-                patch: {
-                    type: "string",
-                    description: "The complete ApplyPatch text or Git unified diff to apply."
-                }
+                operations: {
+                    type: "array", minItems: 1, maxItems: 50,
+                    description: "One operation per path. create: type/path/content; update: type/path/revision/edits; delete: type/path/revision. Include only fields required for that type.",
+                    items: {
+                        type: "object",
+                        properties: {
+                            type: { type: "string", enum: ["create", "update", "delete"] },
+                            path: { type: "string", description: "Repository-relative path with / separators." },
+                            content: { type: "string", description: "create only: complete new file text, including desired final newline." },
+                            revision: { type: "string", description: "update/delete only: full revision copied from ReadFile." },
+                            edits: {
+                                type: "array", minItems: 1, maxItems: 100,
+                                description: "update only: nonoverlapping replacements matching the original file.",
+                                items: {
+                                    type: "object",
+                                    properties: {
+                                        before: { type: "string", minLength: 1, description: "Exact unique text from the original file. Include context for insertions or repeated code." },
+                                        after: { type: "string", description: "Replacement text; empty string removes the matched block." }
+                                    },
+                                    required: ["before", "after"], additionalProperties: false
+                                }
+                            }
+                        },
+                        required: ["type", "path"], additionalProperties: false
+                    }
+                },
+                requestId: { type: "string", maxLength: 128, description: "Optional unique batch identifier for intentional repeated operations. Reuse unchanged on retries; use a fresh identifier for a new batch." }
             },
-            required: ["patch"],
+            required: ["operations"],
             additionalProperties: false
         }
     },

@@ -8,6 +8,7 @@ export async function runContainerExec(
     cmd,
     {
         input,
+        closeStdin = true,
         env,
         workingDir = REPOSITORY_ROOT,
         timeoutMs = 30_000
@@ -66,7 +67,8 @@ export async function runContainerExec(
         });
 
         if (input !== undefined) {
-            stream.end(input);
+            if (closeStdin) stream.end(input);
+            else stream.write(input);
         }
     });
 

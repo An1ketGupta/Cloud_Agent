@@ -197,7 +197,7 @@ Assign focused developer roles and explicit file-level tasks.
 Use the supplied repositoryInventory and Custodian findings; do not repeat repository exploration. Plan implementation tasks that change code, not separate discovery tasks. Match the repository's actual language and structure; a plain HTML/CSS/JavaScript project does not imply an existing Node.js backend. Prefer one implementation task for small changes.
 Include dependencies; prefer tasks that can be executed in a clear order.
 Your plan must cover the whole issue.
-Every file path must be relative to /workspace/repository (for example src/index.js), or an absolute path inside that directory. If validationError is present, correct the plan before responding.
+Every file path must be repository-relative to /workspace/repository (for example src/index.js), using / separators. If validationError is present, correct the plan before responding.
 Return only JSON with goal, acceptanceCriteria, and tasks.
 Each task needs id, role, instructions, files, and dependencies.
 No commands, tests, builds, commits, or pull requests.`,
@@ -253,7 +253,7 @@ Do not make changes.`,
             systemPrompt: `You are WorkCop's Manager.
 Review developer kickoff feedback and finalize a complete, feasible implementation plan for the repository's actual stack.
 Resolve conflicts and dependencies.
-Every file path must be relative to /workspace/repository (for example src/index.js), or an absolute path inside that directory. If validationError is present, correct the plan before responding.
+Every file path must be repository-relative to /workspace/repository (for example src/index.js), using / separators. If validationError is present, correct the plan before responding.
 Return only JSON with goal, acceptanceCriteria, and tasks.
 Each task needs id, role, instructions, files, and dependencies.
 No commands, tests, builds, commits, or pull requests.`,
@@ -280,7 +280,7 @@ No commands, tests, builds, commits, or pull requests.`,
             systemPrompt: `You are WorkCop's ${task.role}.
 Implement your assigned code change in /workspace/repository.
 Read relevant files, locate the correct code, and use ApplyPatch for every change, including new files.
-Use *** Begin Patch / *** Update File: path / @@ / context and +/- lines / *** End Patch for edits. Use *** Add File for new files. Git unified diffs are also accepted. After a patch error, read the current file or GitDiff before retrying.
+Use structured create/update/delete operations. For updates/deletes, copy the revision from ReadFile. Batch related edits; after a content conflict read the affected file before correcting the request.
 You may use only your listed tools.
 Do not run commands or claim that tests/builds ran.
 Review GitDiff before finishing.
@@ -363,7 +363,7 @@ Approve only when the patch appears to satisfy the request.`,
             systemPrompt: `You are WorkCop's revision developer for this repository.
 Address every QA finding using your listed repository tools.
 Inspect current files, apply focused patches with ApplyPatch, and review GitDiff.
-Use *** Begin Patch with *** Update File and @@ sections for edits, or *** Add File for new files. Git unified diffs are also accepted. After a patch error, inspect the current file before retrying.
+Use structured create/update/delete operations with revisions from ReadFile. After a content conflict, read the affected file before submitting corrected edits.
 Do not run tests/builds or claim they ran.
 Return only JSON with summary and changedFiles.`,
 

@@ -4,20 +4,20 @@ import { ReadFile } from "../tools/readFile.js";
 import { SearchFile } from "../tools/searchFile.js";
 import { SearchContent } from "../tools/searchContent.js";
 import { GitDiff } from "../tools/gitDiff.js";
-import { validateExistingPath } from "../tools/repositoryPath.js";
+import { validateOperations, FileOperationError } from "../tools/fileOperationsRuntime.js";
 import { z } from "zod";
 import { discoverySchemas } from "../tools/fileDiscovery.js";
 
 const pathArgs = z.object({
-    filePath: z.string().min(1)
+    filePath: z.string().min(1),
+    offset: z.number().int().min(0).optional(),
+    limit: z.number().int().min(1).max(50_000).optional()
 }).strict();
 
 const schemas = {
     ...discoverySchemas,
     ReadFile: pathArgs,
-    ApplyPatch: z.object({
-        patch: z.string().min(1)
-    }).strict(),
+    ApplyPatch: z.unknown(),
     SearchContent: z.object({
         query: z.string().min(1)
     }).strict(),
@@ -45,17 +45,20 @@ export async function executeFunction(functionCall, container, allowedTools = []
         throw new Error(`Unknown function: ${functionName}`);
     }
 
-    const args = schema.parse(functionCall.arguments);
-
-    if (functionName === "ReadFile") {
-        args.filePath = await validateExistingPath(container, args.filePath);
+    let args;
+    try {
+        args = schema.parse(functionCall.arguments);
+        if (functionName === "ApplyPatch") validateOperations(args);
+    } catch (error) {
+        if (error instanceof FileOperationError) throw error;
+        throw new FileOperationError("INVALID_ARGUMENTS", error.message);
     }
 
     const functions = {
         getFileNameList: () => getFileNameList(container, args),
         SearchFile: () => SearchFile(container, args),
-        ReadFile: () => ReadFile(container, args.filePath),
-        ApplyPatch: () => ApplyPatch(container, args.patch),
+        ReadFile: () => ReadFile(container, args.filePath, args),
+        ApplyPatch: () => ApplyPatch(container, args),
         SearchContent: () => SearchContent(container, args.query),
         GitDiff: () => GitDiff(container)
     };

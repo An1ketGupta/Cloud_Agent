@@ -1,5 +1,5 @@
 import { geminiClient } from "../../clients/geminiClient.js";
-import { toolDeclarations, FILE_DISCOVERY_INSTRUCTIONS } from "../tools/toolDeclarations.js";
+import { toolDeclarations, FILE_DISCOVERY_INSTRUCTIONS, FILE_OPERATION_INSTRUCTIONS } from "../tools/toolDeclarations.js";
 import { executeFunction } from "../sandbox/executeFunction.js";
 import { createDiscoveryGuard } from "./discoveryGuard.js";
 
@@ -31,7 +31,7 @@ async function createInteraction(params, client, signal) {
 export async function runRole({ name, systemPrompt, input, allowedTools, outputSchema, container,
     client = geminiClient, toolExecutor = executeFunction, onProgress = async () => {} }) {
     const guard = createDiscoveryGuard({ container, allowedTools, toolExecutor, repositoryInventory: input?.repositoryInventory });
-    const prompt = () => `${systemPrompt}\n\n${FILE_DISCOVERY_INSTRUCTIONS}${guard.disabled
+    const prompt = () => `${systemPrompt}\n\n${FILE_DISCOVERY_INSTRUCTIONS}${allowedTools.includes("ApplyPatch") ? `\n\n${FILE_OPERATION_INSTRUCTIONS}` : ""}${guard.disabled
         ? `\n${guard.disabledReason} Do not call getFileNameList or SearchFile.` : ""}`;
     const toolConfig = () => {
         const tools = toolDeclarations.filter((tool) => guard.availableTools.includes(tool.name));
@@ -71,13 +71,20 @@ export async function runRole({ name, systemPrompt, input, allowedTools, outputS
         const results = [];
         for (const call of calls) {
             const discovery = call.name === "getFileNameList" || call.name === "SearchFile";
-            const detail = discovery || call.name === "ReadFile" ? ` ${JSON.stringify(call.arguments ?? {}).slice(0, 500)}` : "";
+            const detail = discovery || call.name === "ReadFile" ? ` ${JSON.stringify(call.arguments ?? {}).slice(0, 500)}`
+                : call.name === "ApplyPatch" && Array.isArray(call.arguments?.operations)
+                    ? ` ${JSON.stringify(call.arguments.operations.map((operation) => ({ type: operation?.type, path: operation?.path }))).slice(0, 500)}` : "";
             await onProgress(`${name}: ${call.name}${detail} started.`);
             const wasDisabled = guard.disabled;
-            const response = await guard.execute(call);
+            let response;
+            try { response = await guard.execute(call); }
+            catch (error) {
+                await onProgress(`${name}: ${call.name} failed${error.code ? ` [${error.code}]` : ""}: ${error.message}`);
+                throw error;
+            }
             const counts = response.value?.totalMatches !== undefined
                 ? ` (${response.value.returnedCount}/${response.value.totalMatches} files; nextOffset=${response.value.nextOffset})` : "";
-            await onProgress(`${name}: ${call.name} ${response.isError ? `failed: ${response.value.error}` : "finished."}${counts}${response.cached ? " Reused cached result." : ""}`);
+            await onProgress(`${name}: ${call.name} ${response.isError ? `failed${response.value.code ? ` [${response.value.code}]` : ""}: ${response.value.error}` : "finished."}${counts}${response.cached ? " Reused cached result." : ""}`);
             if (!wasDisabled && guard.disabled) await onProgress(`${name}: File discovery disabled after repeated calls or the discovery budget; continuing with other tools.`);
             results.push({
                 type: "function_result",

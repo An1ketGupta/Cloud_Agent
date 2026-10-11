@@ -5,9 +5,11 @@ export function splitFilePatches(patch = "") {
     const files = new Map();
     for (const section of patch.match(/^diff --git .*?(?=^diff --git |$(?![\s\S]))/gms) || []) {
         const marker = section.match(/^\+\+\+ b\/([^\r\n]+)$/m);
-        const deleted = section.includes("+++ /dev/null");
+        const deleted = section.includes("+++ /dev/null") || /^deleted file mode /m.test(section);
         const oldMarker = section.match(/^--- a\/([^\r\n]+)$/m);
-        const path = deleted ? oldMarker?.[1] : marker?.[1];
+        // Empty added/deleted files have mode/index metadata but no ---/+++ markers.
+        const header = section.match(/^diff --git a\/(.+) b\/\1$/m);
+        const path = (deleted ? oldMarker?.[1] : marker?.[1]) || header?.[1];
         if (!path || path.startsWith('"') || path.includes("\n")) continue;
         normalizeRepositoryPath(path);
         files.set(path, section.endsWith("\n") ? section : `${section}\n`);

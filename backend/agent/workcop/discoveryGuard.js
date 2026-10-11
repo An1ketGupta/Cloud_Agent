@@ -1,4 +1,5 @@
 import { parseDiscoveryArguments } from "../tools/fileDiscovery.js";
+import { createFileOperationGuard } from "./fileOperationGuard.js";
 
 const DISCOVERY_TOOLS = new Set(["getFileNameList", "SearchFile"]);
 const MAX_DISCOVERY_CALLS = 8;
@@ -15,6 +16,7 @@ function stableKey(value) {
 }
 
 export function createDiscoveryGuard({ container, allowedTools, toolExecutor, repositoryInventory }) {
+    const fileOperations = createFileOperationGuard({ container, allowedTools, toolExecutor });
     const cache = new Map();
     let discoveryCalls = 0;
     let repeats = 0;
@@ -69,9 +71,11 @@ export function createDiscoveryGuard({ container, allowedTools, toolExecutor, re
             let response;
             try {
                 if (argumentError) throw argumentError;
-                response = { value: await toolExecutor(call, container, allowedTools), isError: false };
+                response = { value: await fileOperations.execute(call), isError: false };
             } catch (error) {
+                if (["FILE_OPERATION_BUDGET", "FILE_OPERATION_RECOVERY_REQUIRED"].includes(error.code)) throw error;
                 response = { isError: true, value: { error: error.message,
+                    ...(error.code ? { code: error.code, ...error.details } : {}),
                     ...(discovery ? { exampleArguments: examples[call.name], ...error.discovery } : {}) } };
             }
             if (discovery) cache.set(key, response);
