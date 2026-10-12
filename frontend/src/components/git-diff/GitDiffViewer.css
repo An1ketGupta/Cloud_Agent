@@ -1,0 +1,214 @@
+/* ================= Git Diff Styles ================= */
+.gitdiff-viewer {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #0a0b0e;
+  overflow: hidden;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+}
+
+.gitdiff-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #111216;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: #8a8f98;
+}
+
+.gitdiff-counts {
+  display: inline-flex;
+  gap: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+}
+
+.gitdiff-counts span:first-child {
+  color: #34d399;
+}
+
+.gitdiff-counts span:last-child {
+  color: #f87171;
+}
+
+.gitdiff-files {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+}
+
+.gitdiff-file {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: #0e0f13;
+  overflow: hidden;
+}
+
+.gitdiff-file-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: #14151a;
+  color: #e4e5e9;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  user-select: none;
+}
+
+.gitdiff-file-header:hover {
+  background: #191b21;
+}
+
+.gitdiff-disclosure {
+  font-size: 14px;
+  color: #8a8f98;
+  transition: transform 0.15s;
+}
+
+.gitdiff-file:not([open]) .gitdiff-disclosure {
+  transform: rotate(-90deg);
+}
+
+.gitdiff-file-icon {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(94, 106, 210, 0.2);
+  color: #828fff;
+  border: 1px solid rgba(94, 106, 210, 0.3);
+}
+
+.gitdiff-file-name {
+  font-size: 12px;
+  font-weight: 550;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gitdiff-file-status {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  text-transform: capitalize;
+}
+
+.gitdiff-status-added {
+  background: rgba(16, 185, 129, 0.15);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.gitdiff-status-deleted {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.gitdiff-status-modified {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fcd34d;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.file-review-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: #111216;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.file-review-status {
+  font-size: 11px;
+  font-family: 'Inter', sans-serif;
+  color: #6ee7b7;
+  font-weight: 500;
+}
+
+.gitdiff-body {
+  max-height: 550px;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.6;
+  background: #090a0d;
+}
+
+.gitdiff-row {
+  display: grid;
+  grid-template-columns: 46px 46px 20px 1fr;
+  min-width: 100%;
+  width: max-content;
+}
+
+.gitdiff-row:hover {
+  filter: brightness(1.18);
+}
+
+.gitdiff-old-number, .gitdiff-new-number {
+  padding: 0 8px 0 0;
+  text-align: right;
+  color: #43464d;
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  user-select: none;
+  font-size: 11px;
+}
+
+.gitdiff-marker {
+  text-align: center;
+  user-select: none;
+  color: #62666d;
+}
+
+.gitdiff-row code {
+  padding-left: 8px;
+  white-space: pre;
+}
+
+.gitdiff-add {
+  background: rgba(16, 185, 129, 0.12);
+  color: #a7f3d0;
+}
+
+.gitdiff-add .gitdiff-marker {
+  color: #34d399;
+}
+
+.gitdiff-remove {
+  background: rgba(239, 68, 68, 0.12);
+  color: #fecaca;
+}
+
+.gitdiff-remove .gitdiff-marker {
+  color: #f87171;
+}
+
+.gitdiff-context {
+  color: #a1a1aa;
+}
+
+.gitdiff-hunk {
+  padding: 4px 14px;
+  background: rgba(94, 106, 210, 0.12);
+  color: #828fff;
+  border-top: 1px solid rgba(94, 106, 210, 0.2);
+  border-bottom: 1px solid rgba(94, 106, 210, 0.2);
+  font-size: 11px;
+}
+
+.gitdiff-note, .gitdiff-metadata {
+  padding: 6px 14px;
+  background: #101115;
+  color: #71757e;
+  font-size: 11px;
+}

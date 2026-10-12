@@ -1,14 +1,4 @@
-import { authApi, request } from './authApi';
-
-async function withSession(path, options) {
-  try {
-    return await request(path, options);
-  } catch (error) {
-    if (error.status !== 401) throw error;
-    await authApi.refresh();
-    return request(path, options);
-  }
-}
+import { withSession } from './sessionRequest.js';
 
 export const taskApi = {
   list() { return withSession('/task/'); },
