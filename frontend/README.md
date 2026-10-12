@@ -9,7 +9,7 @@ pnpm install
 pnpm dev
 ```
 
-The development server proxies `/auth`, `/me`, `/task`, and `/conversations` to the backend at `http://localhost:3000`.
+The development server proxies `/auth`, `/me`, and `/conversations` to the backend at `http://localhost:3000`.
 
 ```sh
 pnpm lint
@@ -47,4 +47,4 @@ src/
 - Put pure helpers in `utils/` and static configuration in `constants/`.
 - Keep Tailwind utilities with their markup, shared theme rules in `styles/`, and component-specific CSS beside its component.
 
-The workspace retains the existing state-based navigation. Polling hooks clear their timers and ignore pending polling responses after cleanup. API tests cover credentials, session refresh, retries, file review payloads, and error handling.
+The workspace retains the existing state-based navigation. Polling hooks clear their timers and ignore pending polling responses after cleanup. Completed changes from the latest code run can be published using the pull request dialog in `components/conversation/`. Publishing disables messages and file review until it finishes; published runs show their GitHub PR link. Tests cover publication state, PR request payloads, session refresh, file review payloads, and error handling.

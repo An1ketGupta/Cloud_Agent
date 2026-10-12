@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { conversationApi } from '../api/conversationApi.js';
+import { recordPullRequest } from '../utils/taskPublication.js';
 
 export function useActiveConversation(activeId, enabled, onError) {
   const [data, setData] = useState(null);
@@ -40,6 +41,8 @@ export function useActiveConversation(activeId, enabled, onError) {
     conversation: data?.conversation,
     execution: data?.execution,
     refreshConversation,
+    recordPublication: (conversationId, taskId, pullRequest) =>
+      setData((current) => recordPullRequest(current, conversationId, taskId, pullRequest)),
     resetConversation: () => setData(null),
   };
 }

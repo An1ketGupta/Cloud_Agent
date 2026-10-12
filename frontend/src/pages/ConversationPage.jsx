@@ -9,6 +9,9 @@ export default function ConversationPage({
   reviewFile,
   reviewingFile,
   pending,
+  latestTaskId,
+  onCreatePullRequest,
+  publicationBusy,
   composerProps,
 }) {
   return (
@@ -40,13 +43,17 @@ export default function ConversationPage({
         execution={execution}
         onFileDecision={reviewFile}
         reviewingFile={reviewingFile}
+        latestTaskId={latestTaskId}
+        onCreatePullRequest={onCreatePullRequest}
+        canPublish={!pending && !composerProps.busy}
+        publicationBusy={publicationBusy}
       />
 
       {/* Bottom Sticky Composer */}
       <div className="sticky bottom-4 z-20">
         <Composer
           {...composerProps}
-          disabled={pending || !conversation}
+          disabled={pending || publicationBusy || !conversation}
         />
       </div>
     </div>

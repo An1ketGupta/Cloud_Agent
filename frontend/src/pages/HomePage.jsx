@@ -22,7 +22,7 @@ export default function HomePage({
             Solve issues directly in your repository
           </h1>
           <p className="text-[#8a8f98] text-sm sm:text-base leading-relaxed">
-            Choose a repository, provide a prompt, and the agent executes in a container sandbox, tests the changes, and generates an interactive diff.
+            Choose a repository, provide a prompt, and the agent edits code in a container sandbox, reviews the changes, and generates an interactive diff.
           </p>
         </div>
 

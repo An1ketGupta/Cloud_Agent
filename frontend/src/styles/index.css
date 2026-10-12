@@ -3,19 +3,8 @@
 @layer base {
   :root {
     --canvas: #08090a;
-    --surface: #0f1013;
-    --surface-elevated: #15161b;
-    --surface-hover: #1c1d24;
     --border-subtle: rgba(255, 255, 255, 0.07);
-    --border-default: rgba(255, 255, 255, 0.12);
-    --border-highlight: rgba(255, 255, 255, 0.22);
-    --accent: #5e6ad2;
-    --accent-hover: #6f7cf0;
-    --accent-glow: rgba(94, 106, 210, 0.25);
     --text-primary: #f7f8f8;
-    --text-secondary: #8a8f98;
-    --text-muted: #62666d;
-    --text-faint: #43464d;
     
     color-scheme: dark;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -57,29 +46,6 @@
   ::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.24);
   }
-}
-
-/* ================= Linear Brand Components ================= */
-
-.linear-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  color: #f7f8f8;
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  font-size: 15px;
-}
-
-.linear-brand-icon {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  background: linear-gradient(135deg, #5e6ad2 0%, #828fff 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 0 16px rgba(94, 106, 210, 0.5);
 }
 
 /* ================= Buttons ================= */
@@ -142,20 +108,6 @@
 .linear-btn-secondary:disabled {
   opacity: 0.45;
   cursor: not-allowed;
-}
-
-/* ================= Card Sheen Effect ================= */
-.linear-card {
-  position: relative;
-  background: #0f1013;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  transition: border-color 0.25s, box-shadow 0.25s;
-}
-
-.linear-card:hover {
-  border-color: rgba(255, 255, 255, 0.16);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
 }
 
 /* ================= Notices & Alerts ================= */

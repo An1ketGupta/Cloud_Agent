@@ -1,6 +1,9 @@
 import RunDetails from './RunDetails.jsx';
 
-export default function MessageItem({ message, task, execution, onFileDecision, reviewingFile }) {
+export default function MessageItem({
+  message, task, execution, onFileDecision, reviewingFile,
+  onCreatePullRequest, canPublish, publicationBusy,
+}) {
   const isUser = message.role === 'user';
   return (
     <article
@@ -45,6 +48,9 @@ export default function MessageItem({ message, task, execution, onFileDecision, 
           execution={execution}
           onFileDecision={onFileDecision}
           reviewingFile={reviewingFile}
+          onCreatePullRequest={onCreatePullRequest}
+          canPublish={canPublish}
+          publicationBusy={publicationBusy}
         />
       )}
     </article>

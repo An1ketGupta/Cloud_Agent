@@ -3,6 +3,7 @@ import { conversationApi } from '../api/conversationApi.js';
 import { useActiveConversation } from './useActiveConversation.js';
 import { useConversationList } from './useConversationList.js';
 import { useRepositories } from './useRepositories.js';
+import { publicationState } from '../utils/taskPublication.js';
 
 export function useWorkspace(initialUser) {
   const [activeId, setActiveId] = useState(null);
@@ -13,13 +14,17 @@ export function useWorkspace(initialUser) {
   const [reviewingFile, setReviewingFile] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [pullRequestTask, setPullRequestTask] = useState(null);
+  const [publishing, setPublishing] = useState(false);
   const repositoryState = useRepositories(initialUser, setError);
   const { conversations, refreshList } = useConversationList(setError);
-  const { conversation, execution, refreshConversation, resetConversation } =
+  const { conversation, execution, refreshConversation, resetConversation, recordPublication } =
     useActiveConversation(activeId, view === 'conversation', setError);
   const pending = conversation?.messages?.some(
     (message) => message.role === 'assistant' && message.status === 'pending'
   );
+  const publication = publicationState(conversation);
+  const publicationBusy = publishing || publication.publicationBusy;
 
   function navigate(next) {
     setView(next);
@@ -43,7 +48,7 @@ export function useWorkspace(initialUser) {
 
   async function send(sendMode) {
     const content = prompt.trim();
-    if (!content || busy || (view === 'conversation' && pending)) return;
+    if (!content || busy || publicationBusy || (view === 'conversation' && pending)) return;
     setBusy(true);
     setError('');
     try {
@@ -66,6 +71,7 @@ export function useWorkspace(initialUser) {
   }
 
   async function reviewFile(taskId, path, decision) {
+    if (publicationBusy || reviewingFile) return;
     setReviewingFile(`${taskId}:${path}`);
     setError('');
     try {
@@ -76,6 +82,16 @@ export function useWorkspace(initialUser) {
     } finally {
       setReviewingFile('');
     }
+  }
+
+  function openPullRequest(taskId) {
+    if (pending || busy || publicationBusy || reviewingFile || taskId !== publication.latestTaskId) return;
+    setPullRequestTask({ conversationId: activeId, taskId });
+  }
+
+  function pullRequestCreated(pullRequest) {
+    recordPublication(pullRequestTask.conversationId, pullRequestTask.taskId, pullRequest);
+    setPullRequestTask(null);
   }
 
   return {
@@ -101,5 +117,12 @@ export function useWorkspace(initialUser) {
     newConversation,
     send,
     reviewFile,
+    pullRequestTask,
+    closePullRequest: () => setPullRequestTask(null),
+    setPublishing,
+    publicationBusy,
+    latestTaskId: publication.latestTaskId,
+    openPullRequest,
+    pullRequestCreated,
   };
 }

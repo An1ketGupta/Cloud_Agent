@@ -5,6 +5,7 @@ import ConversationPage from '../../pages/ConversationPage.jsx';
 import RepositoriesPage from '../../pages/RepositoriesPage.jsx';
 import AccountPage from '../../pages/AccountPage.jsx';
 import WorkspaceLayout from './WorkspaceLayout.jsx';
+import CreatePullRequestDialog from '../conversation/CreatePullRequestDialog.jsx';
 
 export default function ConversationWorkspace({
   initialUser,
@@ -18,6 +19,8 @@ export default function ConversationWorkspace({
     prompt, setPrompt, send, busy, mode, setMode,
     repositories, repositoryId, setRepositoryId, syncing, syncRepositories,
     conversation, execution, reviewFile, reviewingFile, pending,
+    pullRequestTask, closePullRequest, setPublishing, publicationBusy,
+    latestTaskId, openPullRequest, pullRequestCreated,
   } = useWorkspace(initialUser);
   const composerProps = {
     value: prompt,
@@ -53,6 +56,15 @@ export default function ConversationWorkspace({
       error={error || accountError}
       onDismissError={() => setError('')}
     >
+      {pullRequestTask && (
+        <CreatePullRequestDialog
+          conversationId={pullRequestTask.conversationId}
+          taskId={pullRequestTask.taskId}
+          onClose={closePullRequest}
+          onBusyChange={setPublishing}
+          onCreated={pullRequestCreated}
+        />
+      )}
       {view === 'home' && (
         <HomePage
           user={user}
@@ -78,6 +90,9 @@ export default function ConversationWorkspace({
           reviewFile={reviewFile}
           reviewingFile={reviewingFile}
           pending={pending}
+          latestTaskId={latestTaskId}
+          onCreatePullRequest={openPullRequest}
+          publicationBusy={publicationBusy}
           composerProps={composerProps}
         />
       )}

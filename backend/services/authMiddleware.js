@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken'
 
-export async function AuthMiddleWare(req, res, next) {
-    const accessToken = await req.cookies.accessToken
+export function AuthMiddleWare(req, res, next) {
+    const accessToken = req.cookies.accessToken
     if (!accessToken) {
         return res.status(401).json({
             error: "Platform atuhentication failed"
@@ -13,7 +13,7 @@ export async function AuthMiddleWare(req, res, next) {
         req.user = decoded;
         return next();
     }
-    catch (error) {
+    catch {
         return res.status(401).json({
             error: "Authentication failed"
         });

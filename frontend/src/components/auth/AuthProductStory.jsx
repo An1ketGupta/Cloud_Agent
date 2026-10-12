@@ -35,7 +35,7 @@ export default function AuthProductStory() {
               <div className="w-5 h-5 rounded-full bg-white/[0.05] border border-white/[0.08] flex items-center justify-center text-[#828fff]">
                 <ShieldCheck className="w-3 h-3" />
               </div>
-              <span>Automated quality assurance and sanity testing runs</span>
+              <span>Automated code inspection and quality assurance reviews</span>
             </div>
           </div>
         </div>

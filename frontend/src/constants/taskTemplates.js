@@ -13,7 +13,7 @@ export const taskTemplates = [
     icon: Code2,
     category: 'Feature Development',
     title: 'Implement feature or API endpoint',
-    description: 'Describe requirements in plain language and get an end-to-end pull request with clean diffs.',
+    description: 'Describe requirements in plain language and review the resulting code changes in an interactive diff.',
     mode: 'code',
     prompt: 'Implement a new feature with complete error handling, validation, and corresponding test coverage.',
   },

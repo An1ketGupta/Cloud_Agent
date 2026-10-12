@@ -72,33 +72,3 @@ export async function validateExistingPath(container, filePath) {
 
     return absolutePath;
 }
-
-export async function validateNearestExistingParent(container, filePath) {
-    let parent = path.posix.dirname(
-        normalizeRepositoryPath(filePath)
-    );
-
-    while (parent !== REPOSITORY_ROOT) {
-        const exists = await runContainerExec(
-            container,
-            ["test", "-e", parent]
-        );
-
-        const symlink = await runContainerExec(
-            container,
-            ["test", "-L", parent]
-        );
-
-        if (symlink.exitCode === 0) {
-            throw new Error("Patch path contains a symlink.");
-        }
-
-        if (exists.exitCode === 0) {
-            return validateExistingPath(container, parent);
-        }
-
-        parent = path.posix.dirname(parent);
-    }
-
-    return validateExistingPath(container, REPOSITORY_ROOT);
-}

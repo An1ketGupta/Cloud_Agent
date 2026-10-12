@@ -1,13 +1,13 @@
-import { CheckCircle2, Loader2, ShieldAlert } from 'lucide-react';
+import { CheckCircle2, ExternalLink, GitPullRequest, Loader2, ShieldAlert } from 'lucide-react';
 import GitDiffViewer from '../git-diff/GitDiffViewer.jsx';
+import { taskResult } from '../../utils/taskPublication.js';
 
-export default function RunDetails({ task, execution, onFileDecision, reviewingFile }) {
-  let result;
-  try {
-    result = JSON.parse(task.conversation?.[0]?.response || 'null');
-  } catch {
-    result = null;
-  }
+export default function RunDetails({
+  task, execution, onFileDecision, reviewingFile,
+  onCreatePullRequest, canPublish, publicationBusy,
+}) {
+  const result = taskResult(task);
+  const published = result?.pullRequest?.status === 'created';
   const active = task.status === 'pending' || task.status === 'runnning';
 
   return (
@@ -27,6 +27,16 @@ export default function RunDetails({ task, execution, onFileDecision, reviewingF
           </span>
         </div>
       </div>
+
+      {published ? (
+        <a href={result.pullRequest.url} target="_blank" rel="noopener noreferrer" className="linear-btn-secondary inline-flex items-center gap-2 mb-3 text-xs">
+          <GitPullRequest className="w-3.5 h-3.5 text-emerald-400" /> View PR #{result.pullRequest.number} on GitHub <ExternalLink className="w-3 h-3" />
+        </a>
+      ) : task.status === 'completed' && (result?.patch || result?.fileReview?.displayPatch) && canPublish && (
+        <button type="button" onClick={() => onCreatePullRequest(task.id)} disabled={publicationBusy || !!reviewingFile} className="linear-btn-primary mb-3 text-xs">
+          <GitPullRequest className="w-3.5 h-3.5" /> {publicationBusy ? 'Publishing PR...' : 'Create PR'}
+        </button>
+      )}
 
       {active && (
         <div className="p-3.5 rounded-xl bg-[#0c0d10] border border-white/[0.07] text-xs text-[#a1a1aa] space-y-2">
@@ -69,9 +79,9 @@ export default function RunDetails({ task, execution, onFileDecision, reviewingF
       {(result?.patch || result?.fileReview?.displayPatch) && (
         <GitDiffViewer
           patch={result.fileReview?.displayPatch || result.patch}
-          fileReview={result.fileReview}
-          onFileDecision={(path, decision) => onFileDecision(task.id, path, decision)}
-          reviewingFile={reviewingFile}
+          fileReview={published ? undefined : result.fileReview}
+          onFileDecision={published ? undefined : (path, decision) => onFileDecision(task.id, path, decision)}
+          reviewingFile={publicationBusy ? 'publishing' : reviewingFile}
         />
       )}
 

@@ -1,7 +1,10 @@
 import { Loader2 } from 'lucide-react';
 import MessageItem from './MessageItem.jsx';
 
-export default function MessageList({ conversation, execution, onFileDecision, reviewingFile }) {
+export default function MessageList({
+  conversation, execution, onFileDecision, reviewingFile,
+  latestTaskId, onCreatePullRequest, canPublish, publicationBusy,
+}) {
   const tasks = new Map(conversation?.tasks?.map((task) => [task.id, task]) || []);
   return (
     <div className="flex-1 space-y-4 mb-6">
@@ -18,6 +21,9 @@ export default function MessageList({ conversation, execution, onFileDecision, r
             execution={execution?.[message.taskId]}
             onFileDecision={onFileDecision}
             reviewingFile={reviewingFile}
+            onCreatePullRequest={onCreatePullRequest}
+            canPublish={canPublish && message.taskId === latestTaskId}
+            publicationBusy={publicationBusy}
           />
         ))
       )}
